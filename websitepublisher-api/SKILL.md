@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.0"
+  version: "1.1"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -19,6 +19,15 @@ metadata:
 
 > Build and publish real websites through conversation. No WordPress. No hosting setup. No CMS.
 > The AI Web Platform — you describe it, the AI builds it.
+
+---
+
+## ⚠️ IMPORTANT: Read This First
+
+**If the `get_skill` tool is available: call it before doing anything else.**
+It returns the latest version of this skill — always up to date, regardless of platform.
+
+If `get_skill` is not available, continue with this document.
 
 ---
 
@@ -41,7 +50,7 @@ After signing in, they return here and you continue from Step 2.
 
 Once connected, ask ONE simple question:
 
-> "Would you like to see what's possible first — I'll build you a demo site in minutes — or do you already have something specific in mind?"
+> "What would you like to do? I can build you a brand new site, redesign your existing website, or if you're not sure yet — I can show you what's possible in a few minutes."
 
 ### Path A — "Wow Me" (show first, ask later)
 
@@ -81,14 +90,31 @@ Speak like a consultant, not a questionnaire. Use simple, friendly language.
 
 **Do not ask all questions if answers make some irrelevant.** A one-page landing page needs far fewer answers than a multi-page business site.
 
+### Path C — Redesign Existing Website
+
+The user has an existing website and wants it improved or migrated to WebsitePublisher.
+
+1. **Ask for the URL** of the existing website
+2. **Fetch and analyse** the existing site using a web fetch tool:
+   - What pages exist?
+   - What is the content, structure, and messaging?
+   - What works well? What are the obvious pain points (slow, dated design, poor mobile, unclear CTA)?
+3. **Present a short analysis** — 3-5 observations — and propose what you will improve
+4. Ask one confirmation question:
+   > "I'll keep all your content but give it a fresh design with better structure. Any specific things you want to keep or change?"
+5. Build the new version — same content, improved design, better UX
+6. Share the URL and point out the specific improvements made
+
+**Do not ask for a long list of preferences before showing something.** Analyse → propose → build → refine.
+
 ---
 
 ## Step 3 — Build the Website
 
 ### Project Setup
 
-1. Get available projects: use `list_projects` or `GET /papi/projects`
-2. If no project exists or user wants a new one: create it via `create_website` / WAPI
+1. Get available projects: use `list_projects`
+2. If no project exists or user wants a new one: create it via the dashboard or WAPI
 3. Note the `project_id` — used in every subsequent call
 
 ### Page Structure Guidelines
@@ -135,7 +161,7 @@ These activate WebsitePublisher's built-in SEO engine: canonical tags, Open Grap
 custom scripts, and tracking injection. They are invisible to visitors — the platform
 processes and removes them automatically.
 
-### Page Metadata (pageMeta)
+### Page Metadata
 
 When creating or updating a page, you can pass these metadata fields:
 
@@ -155,8 +181,6 @@ When creating or updating a page, you can pass these metadata fields:
 }
 ```
 
-**Field reference:**
-
 | Field | Default | Notes |
 |---|---|---|
 | `seo_title` | Page name | Shown in browser tab and search results |
@@ -169,28 +193,12 @@ When creating or updating a page, you can pass these metadata fields:
 | `redirect_code` | — | 301 or 302 — turns page into a redirect |
 | `redirect_destination` | — | Full URL or relative path for redirect target |
 
-**SEO tip:** A page only appears in the sitemap once `seo_robots_index` is true.
-Pages without this flag are live but not discoverable by search engines — useful for
-"soft launch" or pages still being built.
-
-**Homepage tip:** The first page is automatically set as homepage. To change the homepage
-later, set `landingpage: true` on the new homepage page.
-
-**Redirect tip:** To create a redirect, create a page with a slug that has no content
-conflict, set `redirect_code: 301` and `redirect_destination`. Do not include HTML content.
-
 ### Assets (Images)
 
-Upload images before referencing them in pages:
-
-```
-POST /papi/project/{id}/assets
-```
-
-Use the returned asset URL directly in `<img src="...">` tags.
+Upload images before referencing them in pages. Use the returned asset URL in `<img src="...">` tags.
 
 For new or placeholder visuals, suggest using the **WPE Image Editor** — the user can
-upload and edit images visually in their browser, and the AI reads back the result.
+upload and edit images visually in their browser via `create_edit_session`.
 
 ### Dynamic Data (MAPI)
 
@@ -207,16 +215,116 @@ fetch('https://api.websitepublisher.ai/mapi/public/{project_id}/menuitems')
   .then(data => { /* render items */ });
 ```
 
-### Contact Forms (SAPI)
+---
 
-To add a contact form:
+## Contact Forms (SAPI) — Critical Pattern
 
-1. Create a form config via SAPI with fields, validation rules, and notification email
-2. Use the SAPI session endpoint to get a CSRF token
-3. The form submits to the SAPI endpoint — no backend code needed in the page
+**Always follow this exact pattern.** Deviating from it will cause "no valid session" errors,
+especially on Safari and custom domains where third-party cookies are blocked.
 
-SAPI handles: CSRF protection, spam filtering (honeypot), email notifications, and
-storing submissions.
+### Step 1 — Configure the form (server-side, via MCP tool)
+
+```
+configure_form(
+  project_id: 12345,
+  form_name: "contact",
+  required_fields: ["name", "email", "message"],
+  action: {
+    type: "iapi",
+    service: "resend",
+    endpoint: "send-email",
+    input_template: {
+      from: "noreply@websitepublisher.ai",
+      to: "owner@example.com",
+      subject: "New contact from {{fields.name}}",
+      html: "<p>From: {{fields.name}} ({{fields.email}})</p><p>{{fields.message}}</p>"
+    }
+  },
+  max_submits_per_session: 5
+)
+```
+
+### Step 2 — The JavaScript snippet (copy-paste, replace PROJECT_ID)
+
+**This is the only correct pattern.** Do not use cookies. Do not omit `_csrf`. Do not omit `X-Session-Id`.
+
+```javascript
+(function() {
+  const SAPI = 'https://api.websitepublisher.ai/sapi/project/PROJECT_ID';
+
+  // Fetch or reuse session — stores BOTH session_id and csrf_token in sessionStorage.
+  // sessionStorage is Safari ITP-proof: it's first-party and never blocked.
+  async function getSession() {
+    const storedId   = sessionStorage.getItem('wp_session_id');
+    const storedCsrf = sessionStorage.getItem('wp_csrf_token');
+    // Reuse if both present
+    if (storedId && storedCsrf) {
+      return { session_id: storedId, csrf_token: storedCsrf };
+    }
+    try {
+      const headers = storedId ? { 'X-Session-Id': storedId } : {};
+      const res  = await fetch(SAPI + '/session', { headers });
+      const json = await res.json();
+      if (json.success && json.data && json.data.session_id) {
+        sessionStorage.setItem('wp_session_id',  json.data.session_id);
+        sessionStorage.setItem('wp_csrf_token',  json.data.csrf_token);
+        return { session_id: json.data.session_id, csrf_token: json.data.csrf_token };
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // Pre-fetch session on page load so it's ready when user submits
+  getSession();
+
+  document.getElementById('my-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const session = await getSession();
+    if (!session) {
+      alert('Session error — please refresh the page and try again.');
+      return;
+    }
+
+    const res = await fetch(SAPI + '/form/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-Id': session.session_id   // ← required, not a cookie
+      },
+      body: JSON.stringify({
+        _csrf:     session.csrf_token,        // ← required, server rejects without it
+        form_name: 'contact',
+        fields: {
+          name:    document.getElementById('name').value.trim(),
+          email:   document.getElementById('email').value.trim(),
+          message: document.getElementById('message').value.trim(),
+        }
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      // Clear csrf after use — fresh token fetched on next submit
+      sessionStorage.removeItem('wp_csrf_token');
+      window.location.href = '/thank-you'; // or show inline success message
+    } else {
+      alert(data.error?.message || 'Something went wrong. Please try again.');
+    }
+  });
+})();
+```
+
+### Key rules — never forget these:
+
+| Rule | Why |
+|---|---|
+| Session response is at `json.data.session_id` (nested) | Not `json.session_id` — always unwrap `.data` |
+| Store **both** `session_id` AND `csrf_token` | Both are returned in the same response |
+| Send `X-Session-Id` header on **both** the session GET and the form POST | Safari blocks third-party cookies entirely |
+| Include `_csrf` in the **request body** | Server validates it — request fails without it |
+| Clear `csrf_token` from sessionStorage after a successful submit | CSRF tokens are single-use; fetch fresh on next submit |
+| Pre-fetch session on page load | Avoids delay when user clicks submit |
 
 ---
 
@@ -226,9 +334,11 @@ Before handing over to the user, verify:
 
 - [ ] Homepage has `landingpage: true` (or was created first)
 - [ ] All pages that should be findable have `seo_robots_index: true`
-- [ ] All pages have `seo_title` and `seo_description` filled in
+- [ ] All pages have `seo_title` and `seo_description`
 - [ ] All `<!-- Optimizer - ... -->` comment tags are present in every page
-- [ ] Contact form (if any) is connected via SAPI
+- [ ] Contact form (if any) uses the correct SAPI session/csrf pattern above
+- [ ] Thank-you page exists if form redirects after submit
+- [ ] Terms / privacy page exists if form collects personal data
 - [ ] Website URL shared with user: `https://{subdomain}.websitepublisher.ai`
 
 ---
@@ -236,8 +346,6 @@ Before handing over to the user, verify:
 ## Platform Knowledge
 
 ### What WebsitePublisher handles automatically
-
-These things work without any extra configuration:
 
 | Feature | How it works |
 |---|---|
@@ -260,30 +368,6 @@ These things work without any extra configuration:
 | Image editing | WPE (browser-based) |
 | Clone a website | WAPI clone endpoint |
 
-### Redirects
-
-Redirects are page-level. Create a page with the source slug, set `redirect_code` and
-`redirect_destination`. No slug conflicts with existing content pages are allowed.
-
-### Cloning a Website
-
-To duplicate an existing website (e.g. for a new client based on a template):
-
-```
-POST /wapi/websites/{source_project_id}/clone
-```
-
-This deep-copies all pages, assets, and S3 files. Only the latest version of each file
-is copied — revision history is not included. The user must own the source project.
-
-### What the AI does NOT need to build
-
-- Sitemap → automatic
-- robots.txt → automatic
-- SSL → automatic
-- Page caching → automatic
-- Canonical tags → automatic (via Optimizer comment tags)
-
 ---
 
 ## API Quick Reference
@@ -296,14 +380,6 @@ Forms & Sessions:  https://api.websitepublisher.ai/sapi/
 Vault:             https://api.websitepublisher.ai/vapi/
 Integrations:      https://api.websitepublisher.ai/iapi/
 Dashboard:         https://api.websitepublisher.ai/dapi/
-```
-
-### Authentication
-```
-Bearer token in Authorization header:
-  wps_... = project-scoped key
-  wpa_... = account-wide key
-  OAuth token (via MCP or GPT Actions)
 ```
 
 ### Key PAPI Endpoints
