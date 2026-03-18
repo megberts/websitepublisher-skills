@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.1"
+  version: "1.2"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -391,6 +391,50 @@ PUT    /papi/project/{id}/pages/{slug}          Update page
 DELETE /papi/project/{id}/pages/{slug}          Delete page
 POST   /papi/project/{id}/assets                Upload asset
 GET    /papi/project/{id}/pages?type=fragment   List fragments
+```
+
+### Key IAPI Endpoints
+```
+POST   /iapi/project/{id}/{service}/{endpoint}   Execute integration
+
+# Examples:
+POST   /iapi/project/{id}/leads/submit-lead      Store a lead
+POST   /iapi/project/{id}/leads/get-leads        Retrieve leads (authenticated)
+POST   /iapi/project/{id}/leads/update-status    Update lead status
+POST   /iapi/project/{id}/resend/send-email      Send email via Resend
+POST   /iapi/project/{id}/mollie/create-payment  Create Mollie payment
+```
+
+### Lead Capture
+
+Form submissions with `action: {"type": "leads"}` are stored in the platform's
+built-in lead capture — no integration setup required.
+
+**Retrieve leads via MCP tool:**
+```
+leads_get_leads  →  project_id (+ optional: status, form_name, page, per_page)
+```
+
+**Retrieve leads via HTTP (for dashboard pages / browser JavaScript):**
+```
+POST /iapi/project/{id}/leads/get-leads
+Authorization: Bearer {wps_token}
+Content-Type: application/json
+Body: {"page": 1, "per_page": 25}
+
+Optional filters: status (new/contacted/converted), form_name, date_from, date_to
+```
+
+**Important:** Leads are always authenticated — there is no public URL.
+Never ask for routing files to find the leads endpoint — the URL above is canonical.
+
+**Configure lead capture on a form:**
+```json
+{
+  "form_name": "contact",
+  "actions": [{"type": "leads"}],
+  "required_fields": ["name", "email"]
+}
 ```
 
 ### Full Documentation
