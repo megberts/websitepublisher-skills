@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.2"
+  version: "1.3"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -106,6 +106,41 @@ The user has an existing website and wants it improved or migrated to WebsitePub
 6. Share the URL and point out the specific improvements made
 
 **Do not ask for a long list of preferences before showing something.** Analyse → propose → build → refine.
+
+---
+
+## Design Guidelines
+
+> **If a `frontend-design` skill is available in your environment, read it before building any HTML.**
+> The guidelines below are a compact version — the full skill contains deeper creative direction.
+
+Every website you build must look **professionally designed**, not like AI-generated template output.
+Follow these principles:
+
+### Typography
+Choose distinctive, characterful fonts — never default to generic families like Arial, Inter, Roboto, or system fonts.
+Pair a display font (for headings) with a refined body font. Google Fonts is available via `<link>` tags.
+
+### Color & Theme
+Commit to a cohesive palette with **one dominant color and sharp accents**. Avoid timid, evenly-distributed palettes.
+Use CSS custom properties (`--color-primary`, `--color-accent`, etc.) for consistency across pages.
+Vary between light and dark themes — do not always default to white backgrounds.
+
+### Layout & Composition
+Break out of predictable grid patterns. Use asymmetry, generous whitespace, overlapping elements, or full-bleed sections to create visual interest.
+Every page should have a clear visual hierarchy that guides the visitor's eye.
+
+### Motion & Micro-interactions
+Add CSS animations for page load reveals (staggered `animation-delay`), hover state transitions, and scroll-triggered effects.
+Prioritize CSS-only solutions. One well-orchestrated entrance animation creates more impact than scattered effects.
+
+### Atmosphere
+Create depth and texture — not flat solid-color blocks. Use gradient meshes, subtle noise/grain overlays, layered transparencies, or dramatic shadows depending on the aesthetic.
+
+### The Rule
+**No two websites should look the same.** Match the design to the business, audience, and purpose.
+A law firm looks nothing like a skate shop. A restaurant looks nothing like a SaaS landing page.
+If the user has not specified a style preference, choose a bold direction and commit to it.
 
 ---
 
@@ -339,6 +374,7 @@ Before handing over to the user, verify:
 - [ ] Contact form (if any) uses the correct SAPI session/csrf pattern above
 - [ ] Thank-you page exists if form redirects after submit
 - [ ] Terms / privacy page exists if form collects personal data
+- [ ] Design uses distinctive typography and cohesive color palette (not generic AI defaults)
 - [ ] Website URL shared with user: `https://{subdomain}.websitepublisher.ai`
 
 ---
