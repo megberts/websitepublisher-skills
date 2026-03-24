@@ -473,6 +473,18 @@ Never ask for routing files to find the leads endpoint — the URL above is cano
 }
 ```
 
+---
+
+## For Platform Developers
+
+If you are working on the WebsitePublisher.ai platform itself rather than building
+a customer website, a separate development skill is available with internal conventions,
+TAPI task tracking workflow, and infrastructure reference:
+
+```
+https://www.websitepublisher.ai/skills/websitepublisher-dev/SKILL.md
+```
+
 ### Full Documentation
 https://www.websitepublisher.ai/docs
 
