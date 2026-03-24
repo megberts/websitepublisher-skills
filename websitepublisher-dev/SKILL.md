@@ -7,7 +7,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.0"
+  version: "1.1"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -104,16 +104,11 @@ These apply to all code written for WebsitePublisher. Read before touching any f
 
 - **No regex on large HTML files** — use strpos/substr. Prior bad experience with regex on large files causing corruption.
 - **Surgical changes preferred** — minimal targeted patches over broad rewrites
-- **Laravel over nginx for business logic** — fixes belong in Laravel, not nginx config
-- **Architecture before code** — always resolve full architecture before implementation
-- **Check full files before rewriting** — never patch blind
 
 ### Deployment
 
-- Always deploy to both **hosting17** and **hosting19**
-- After every deploy: `php artisan config:clear && php artisan cache:clear && php artisan route:clear`
-- Test environment: `hosting15` (`*.test.websitepublisher.ai`)
-- Working directory: `/home/websumo.com/`
+- Test environment available at `*.test.websitepublisher.ai`
+- Server details are managed internally — not stored in this skill
 
 ### API conventions
 
@@ -130,31 +125,17 @@ These apply to all code written for WebsitePublisher. Read before touching any f
 - Always include `<!-- Optimizer - ... -->` comment tags in every page
 - Auto-injected by createPage/updatePage — do not strip them
 
-### WebSumo layer
-
-- WebSumo branding must never appear to end users or AI agents
-- No WebSumo references in user-facing content or API responses
-
-### Database
-
-- Default connection: `dbase46608`
-- Dedicated DB tables preferred over MAPI entities (no per-project Modeler setup needed)
-- Pattern: `papi_*` prefix for platform tables
-
 ---
 
 ## Infrastructure Reference
 
-| Resource | Value |
-|----------|-------|
-| Production | hosting17 + hosting19 |
-| Test env | hosting15 |
-| Database | dbase46608 |
-| CDN | cdn.websitepublisher.ai |
-| S3 disk (private) | do-private |
-| S3 disk (public) | do-public |
-| MCP server | mcp.websitepublisher.ai |
-| API gateway | api.websitepublisher.ai |
+| Resource | Value                        |
+|----------|------------------------------|
+| Production | Clustered                    |
+| Test env | `*.test.websitepublisher.ai` |
+| CDN | `cdn.websitepublisher.ai`    |
+| MCP server | `mcp.websitepublisher.ai`    |
+| API gateway | `api.websitepublisher.ai`    |
 
 ### API layers
 
@@ -174,7 +155,7 @@ These apply to all code written for WebsitePublisher. Read before touching any f
 
 ---
 
-## MCP Curl Testing
+## MCP / TAPI Curl Testing
 
 Always include all three headers:
 ```bash
@@ -185,26 +166,7 @@ curl -s -X POST "https://api.websitepublisher.ai/tapi/tasks" \
   -d '{...}'
 ```
 
-Test token (project 22291): `wpa_e0d60e666298b6411e22ee8f70ec9daa09d9ad13212caf9be3066b7b728970c8`
-
 ---
 
-## Key Documents
-
-Current canonical documents (latest versions in project knowledge):
-
-| Document | Purpose |
-|----------|---------|
-| `websitepublisher-MAIN-audit-23_0-2026-03-23.md` | Open backlog — superseded by TAPI |
-| `tapi-architecture.md` | TAPI design |
-| `sapi-fase4-5-implementation-plan.md` | SAPI Fase 4+5 |
-| `aapi-architecture.md` | AAPI design |
-| `capi-master-plan-v1_1-2026-03-21.md` | CAPI roadmap |
-| `flow-framework-architecture.md` | Flow Framework |
-| `papi-fragments-architecture.md` | PAPI Fragments |
-
----
-
-*Dev Skill version: 1.0*
+*Dev Skill version: 1.1*
 *Last updated: 24 maart 2026*
-*Maintained by: MikeyBear + Claude*
