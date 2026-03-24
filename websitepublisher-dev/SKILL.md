@@ -92,7 +92,6 @@ Always set `session_label` so history is attributable:
 - `"claude-desktop"` — Claude Desktop MCP session
 - `"sessie-a"`, `"sessie-b"` — parallel sessions
 - `"browser"` — claude.ai browser session
-- `"mikey"` — manual update by MikeyBear
 
 ---
 
