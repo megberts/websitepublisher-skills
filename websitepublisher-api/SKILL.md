@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.3"
+  version: "1.4"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -232,8 +232,64 @@ When creating or updating a page, you can pass these metadata fields:
 
 Upload images before referencing them in pages. Use the returned asset URL in `<img src="...">` tags.
 
-For new or placeholder visuals, suggest using the **WPE Image Editor** — the user can
-upload and edit images visually in their browser via `create_edit_session`.
+For new or placeholder visuals, use the **WPE Image Editor** — the user can upload and
+replace images visually in their browser via `create_edit_session`.
+
+#### ⚠️ Image Editor — verplichte aanpak voor placeholder afbeeldingen
+
+Wanneer je een pagina bouwt met afbeelding-slots die de gebruiker later via de Image Editor
+invult, gelden deze strikte regels:
+
+**Regel 1 — Gebruik `data-wpe-slot` op elke `<img>` tag**
+De Image Editor gebruikt dit attribuut om de juiste img te identificeren bij upload.
+Zonder dit attribuut kan de editor de afbeelding niet vervangen.
+
+**Regel 2 — De `src` MOET een werkende URL zijn**
+Een lege `src=""` of een 404-URL maakt de afbeelding onzichtbaar in de browser.
+De editor kan alleen klikken op images die daadwerkelijk renderen op de pagina.
+Gebruik altijd `https://placehold.co/` als placeholder — deze laadt gegarandeerd.
+
+**Correct voorbeeld:**
+```html
+<img
+  src="https://placehold.co/800x600/D6EEF2/1B5E6B?text=Foto+omschrijving"
+  data-wpe-slot="unieke-slot-naam"
+  alt="Beschrijving"
+  id="unieke-slot-naam">
+```
+
+**Placehold.co formaat:** `https://placehold.co/{breedte}x{hoogte}/{achtergrond}/{tekst}?text={label}`
+Gebruik kleuren passend bij het kleurschema van de site zodat placeholders er verzorgd uitzien.
+
+**Nooit doen:**
+```html
+<!-- ❌ Lege src — onzichtbaar, niet klikbaar -->
+<img src="" data-wpe-slot="mijn-foto">
+
+<!-- ❌ Niet-bestaand pad — 404, onzichtbaar -->
+<img src="/assets/mijn-foto.jpg" data-wpe-slot="mijn-foto">
+```
+
+**Na upload via de editor** wordt de `src` automatisch vervangen door de CDN URL
+(`cdn.websitepublisher.ai/custom/wid{id}/images/...`).
+
+#### Image Editor workflow
+
+1. Bouw de pagina met werkende placehold.co src + `data-wpe-slot` op alle img tags
+2. Maak een edit sessie aan via `create_edit_session`
+3. Geef de gebruiker de `edit_url`
+4. De gebruiker klikt een placeholder aan, uploadt de echte foto → editor slaat op
+5. Na "Save & Close" is de pagina direct live (nginx cache wordt automatisch gepurged)
+
+#### Veelgebruikte placeholder-afmetingen
+
+| Gebruik | Afmeting |
+|---|---|
+| Hero breed | 1200x675 |
+| Foto 4:3 | 800x600 |
+| Portret | 600x800 |
+| Logo nav | 240x48 |
+| Team card | 600x520 |
 
 ### Dynamic Data (MAPI)
 
