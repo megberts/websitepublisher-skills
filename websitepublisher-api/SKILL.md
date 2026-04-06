@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.5"
+  version: "1.6"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -394,6 +394,7 @@ configure_form(
           name:    document.getElementById('name').value.trim(),
           email:   document.getElementById('email').value.trim(),
           message: document.getElementById('message').value.trim(),
+          website: '',  // ← honeypot: leave empty, bots fill this in
         }
       })
     });
@@ -420,6 +421,8 @@ configure_form(
 | Include `_csrf` in the **request body** | Server validates it — request fails without it |
 | Clear `csrf_token` from sessionStorage after a successful submit | CSRF tokens are single-use; fetch fresh on next submit |
 | Pre-fetch session on page load | Avoids delay when user clicks submit |
+| Always include `website: ''` in the fields object | Honeypot field — bots fill it in, humans leave it empty. Server silently drops the submission if non-empty |
+| Never pre-fill the honeypot field | An empty string is required — any value triggers bot detection |
 
 ---
 
@@ -436,6 +439,7 @@ Before handing over to the user, verify:
 - [ ] Terms / privacy page exists if form collects personal data
 - [ ] Design uses distinctive typography and cohesive color palette (not generic AI defaults)
 - [ ] Website URL shared with user: `https://{subdomain}.websitepublisher.ai`
+- [ ] Contact form includes `website: ''` honeypot field in the fields object
 
 ---
 
