@@ -111,8 +111,12 @@ The user has an existing website and wants it improved or migrated to WebsitePub
 
 ## Design Guidelines
 
-> **If a `frontend-design` skill is available in your environment, read it before building any HTML.**
-> The guidelines below are a compact version — the full skill contains deeper creative direction.
+> **Before building any HTML, fetch the design skill for detailed guidelines:**
+> Call `get_skill` with `skill_name="design"` — it contains comprehensive typography, color,
+> layout, animation, and atmosphere guidelines that produce professional-quality websites.
+>
+> If a `frontend-design` skill is also available in your environment, read that too.
+> The guidelines below are a minimal fallback. The design skill is always more complete.
 
 Every website you build must look **professionally designed**, not like AI-generated template output.
 Follow these principles:
