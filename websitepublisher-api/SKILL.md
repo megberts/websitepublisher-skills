@@ -424,6 +424,60 @@ configure_form(
 | Always include `website: ''` in the fields object | Honeypot field — bots fill it in, humans leave it empty. Server silently drops the submission if non-empty |
 | Never pre-fill the honeypot field | An empty string is required — any value triggers bot detection |
 
+### Forms with File Upload
+
+Forms can accept image uploads from visitors via the SAPI upload endpoint.
+Uploads are stored as project assets on the CDN — no bearer token needed.
+
+**Flow:** upload file(s) first → collect CDN URLs → include in form submit fields.
+
+```javascript
+// Upload a file — returns CDN URL + fresh CSRF token
+async function uploadFile(file, session) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('_csrf', session.csrf_token);
+  form.append('form_name', 'intake');  // optional, for traceability
+
+  const res = await fetch(SAPI + '/form/upload', {
+    method: 'POST',
+    headers: { 'X-Session-Id': session.session_id },
+    body: form   // no Content-Type header — browser sets multipart boundary
+  });
+
+  const data = await res.json();
+  if (data.success) {
+    // IMPORTANT: update stored CSRF — tokens are single-use
+    sessionStorage.setItem('wp_csrf_token', data.data.new_csrf_token);
+    session.csrf_token = data.data.new_csrf_token;
+    return data.data.asset_url;   // CDN URL ready for use
+  }
+  throw new Error(data.error?.message || 'Upload failed');
+}
+```
+
+**Upload rules:**
+
+| Rule | Value |
+|---|---|
+| Allowed types | JPEG, PNG, WebP only |
+| Max file size | 5 MB per file |
+| Max per session | 10 uploads |
+| CSRF | Single-use — use `new_csrf_token` from response for next call |
+| Response includes | `asset_url`, `filename`, `mime_type`, `size`, `width`, `height`, `uploads_remaining` |
+
+**Include uploaded URLs in form submit:**
+```javascript
+// After uploading, pass CDN URLs as regular form fields
+fields: {
+  name: '...',
+  email: '...',
+  image_url_1: uploadedUrl1,  // CDN URL from upload response
+  image_url_2: uploadedUrl2,
+  website: '',  // honeypot
+}
+```
+
 ---
 
 ## Step 4 — Go Live Checklist
@@ -503,6 +557,17 @@ POST   /iapi/project/{id}/leads/get-leads        Retrieve leads (authenticated)
 POST   /iapi/project/{id}/leads/update-status    Update lead status
 POST   /iapi/project/{id}/resend/send-email      Send email via Resend
 POST   /iapi/project/{id}/mollie/create-payment  Create Mollie payment
+```
+
+### Key SAPI Endpoints (visitor-facing, no bearer token)
+```
+GET    /sapi/project/{id}/session                Start or resume session
+GET    /sapi/project/{id}/csrf/refresh           Refresh CSRF token
+POST   /sapi/project/{id}/form/submit            Submit form data
+POST   /sapi/project/{id}/form/upload            Upload image (multipart)
+POST   /sapi/project/{id}/auth/request           Request magic link/code
+POST   /sapi/project/{id}/auth/verify            Verify code
+GET    /sapi/project/{id}/auth/status            Check auth status
 ```
 
 ### Lead Capture
