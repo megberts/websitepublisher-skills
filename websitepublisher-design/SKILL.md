@@ -7,7 +7,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.0"
+  version: "1.1"
 ---
 
 # WebsitePublisher Design Skill
@@ -26,6 +26,60 @@ Before writing code, answer three questions:
 3. **What makes this unforgettable?** Identify one signature element: a dramatic hero, an unusual color, a bold font, an unexpected layout. This is the thing someone remembers.
 
 **Commit fully.** A half-bold design looks worse than a fully conservative one. Choose a direction and execute it with conviction.
+
+---
+
+## 1b. Site Context — Check Before Building
+
+Before making any design decisions, check if the project already has a design context set.
+
+Call `get_project_status` — the response may include a `design_context` block:
+
+```json
+{
+  "design_context": {
+    "color_palette": {
+      "primary": "#2D5A3D",
+      "secondary": "#F4E8D1",
+      "accent": "#C17C5A",
+      "background": "#FFFFFF",
+      "text": "#1A1A1A"
+    },
+    "fonts": {
+      "heading": "Playfair Display",
+      "body": "Inter"
+    },
+    "style_notes": "Soft sage & blush palette, organic feel, rounded corners",
+    "locale": "nl"
+  }
+}
+```
+
+### If design_context exists:
+- **Use it as your foundation.** These are the client's established design choices.
+- Map `color_palette` values to CSS custom properties (`--color-primary`, `--color-accent`, etc.)
+- Use the specified `fonts` for heading and body — load them via Google Fonts
+- Follow `style_notes` as creative direction
+- Use `locale` for content language (`<html lang="...">`)
+- You can still apply all the techniques from this skill (animations, layouts, atmosphere) — but within the established palette and typography.
+
+### If design_context is null:
+- Follow the full design thinking process in this skill
+- Ask the user for their preferences: colors, fonts, style direction
+- After agreeing on a direction, save it for future sessions:
+  ```
+  execute_integration(
+    service: "site_context",
+    endpoint: "set-context",
+    input: {
+      color_palette: { primary: "#...", secondary: "#...", accent: "#...", background: "#...", text: "#..." },
+      fonts: { heading: "Font Name", body: "Font Name" },
+      style_notes: "Short description of the visual direction",
+      locale: "en"
+    }
+  )
+  ```
+- This ensures consistency across all future conversations about this project.
 
 ---
 

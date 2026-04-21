@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.6"
+  version: "1.7"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -155,6 +155,21 @@ If the user has not specified a style preference, choose a bold direction and co
 1. Get available projects: use `list_projects`
 2. If no project exists or user wants a new one: create it via the dashboard or WAPI
 3. Note the `project_id` — used in every subsequent call
+4. **Check design context:** call `get_project_status` — if `design_context` is set, use those colors, fonts, and style notes as the foundation for all pages you build. If `design_context` is null, ask the user for their preferred colors, fonts, and style direction during intake, then save it:
+   ```
+   execute_integration(
+     project_id: ...,
+     service: "site_context",
+     endpoint: "set-context",
+     input: {
+       color_palette: { primary: "#...", secondary: "#...", accent: "#...", background: "#...", text: "#..." },
+       fonts: { heading: "Font Name", body: "Font Name" },
+       style_notes: "Short description of the visual direction",
+       locale: "en"
+     }
+   )
+   ```
+   This ensures all future sessions automatically match the same design language.
 
 ### Page Structure Guidelines
 
@@ -492,6 +507,7 @@ Before handing over to the user, verify:
 - [ ] Thank-you page exists if form redirects after submit
 - [ ] Terms / privacy page exists if form collects personal data
 - [ ] Design uses distinctive typography and cohesive color palette (not generic AI defaults)
+- [ ] Design context saved via `execute_integration(service: "site_context")` for future consistency
 - [ ] Website URL shared with user: `https://{subdomain}.websitepublisher.ai`
 - [ ] Contact form includes `website: ''` honeypot field in the fields object
 
@@ -552,11 +568,13 @@ GET    /papi/project/{id}/pages?type=fragment   List fragments
 POST   /iapi/project/{id}/{service}/{endpoint}   Execute integration
 
 # Examples:
-POST   /iapi/project/{id}/leads/submit-lead      Store a lead
-POST   /iapi/project/{id}/leads/get-leads        Retrieve leads (authenticated)
-POST   /iapi/project/{id}/leads/update-status    Update lead status
-POST   /iapi/project/{id}/resend/send-email      Send email via Resend
-POST   /iapi/project/{id}/mollie/create-payment  Create Mollie payment
+POST   /iapi/project/{id}/leads/submit-lead          Store a lead
+POST   /iapi/project/{id}/leads/get-leads             Retrieve leads (authenticated)
+POST   /iapi/project/{id}/leads/update-status         Update lead status
+POST   /iapi/project/{id}/resend/send-email           Send email via Resend
+POST   /iapi/project/{id}/mollie/create-payment       Create Mollie payment
+POST   /iapi/project/{id}/site_context/set-context    Save design context
+POST   /iapi/project/{id}/site_context/get-context    Get design context
 ```
 
 ### Key SAPI Endpoints (visitor-facing, no bearer token)
