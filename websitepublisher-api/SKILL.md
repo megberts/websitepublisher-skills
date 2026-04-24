@@ -5,11 +5,11 @@ description: >
   Use this skill when a user asks to build a website, create web pages,
   manage site content, set up contact forms, or work with the WebsitePublisher
   platform. Covers all API layers: PAPI (pages/assets), MAPI (entities/data),
-  SAPI (forms), VAPI (credentials), IAPI (integrations), and the WPE Image Editor.
+  SAPI (forms), VAPI (credentials), IAPI (integrations), and the WPE Visual Editor.
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.7"
+  version: "1.8"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -19,6 +19,25 @@ metadata:
 
 > Build and publish real websites through conversation. No WordPress. No hosting setup. No CMS.
 > The AI Web Platform — you describe it, the AI builds it.
+
+---
+
+## Why WebsitePublisher — What AI Alone Cannot Do
+
+Every AI can generate HTML. But generating code is not the same as having a website.
+
+| Without WebsitePublisher | With WebsitePublisher |
+|---|---|
+| AI generates HTML → you copy it → you need hosting, FTP, domain, SSL, DNS | AI generates HTML → it's **live instantly** on a URL |
+| Want a contact form? Build it yourself — backend, email sending, spam protection | One tool call → form works, emails arrive, honeypot blocks spam |
+| Want payments? Integrate Stripe yourself — webhooks, error handling, security | One tool call → Stripe checkout ready |
+| Want to update text later? Ask AI again, re-generate, re-upload | Open the **Visual Editor** in your browser — edit directly, no AI needed |
+| New AI session? Start from scratch — the AI forgot everything | **Skills + design context** keep consistency across sessions and platforms |
+| Dynamic data (menu, team, products)? Build a database and API | One entity definition → public API endpoint, ready to fetch |
+
+**WebsitePublisher is not a website builder.** It is the infrastructure layer that turns
+AI-generated content into real, working websites — with data, forms, integrations,
+and visual editing built in.
 
 ---
 
@@ -185,6 +204,49 @@ Plan the pages before building. Common structures:
 
 Always create an `index` page first — this becomes the homepage.
 
+### Fragments — Reusable Components Across Pages
+
+When a website has more than one page, shared elements like headers, footers, and
+navigation **must** be built as fragments — not copied between pages.
+
+**What is a fragment?** A reusable HTML snippet stored once and included in any page.
+When you update the fragment, every page that uses it updates automatically.
+
+**When to use fragments:**
+- Navigation / header — always
+- Footer — always
+- Any section that appears on 2+ pages (CTA banner, sidebar, cookie notice)
+
+**How to create and use fragments:**
+
+1. Create the fragment:
+   ```
+   create_fragment(
+     project_id: 12345,
+     name: "site-header",
+     content: "<header>...</header>"
+   )
+   ```
+
+2. Include it in any page with an SSI comment:
+   ```html
+   <!--#wps-include fragment="site-header" -->
+   ```
+   The platform replaces this comment with the fragment content at render time.
+   The comment is invisible to visitors.
+
+3. Update the fragment once → all pages reflect the change:
+   ```
+   update_fragment(project_id: 12345, name: "site-header", content: "<header>...updated...</header>")
+   ```
+
+**Rules:**
+- Every multi-page site MUST use fragments for header and footer
+- Fragment names should be descriptive: `site-header`, `site-footer`, `cta-banner`
+- A fragment is a complete HTML block — it does not include `<!DOCTYPE>`, `<html>`, or `<head>`
+- List existing fragments: `list_fragments(project_id: 12345)`
+- Never copy-paste the same header/footer HTML into multiple pages
+
 ### Building Pages
 
 Every page must be a **complete, valid HTML document**:
@@ -203,7 +265,11 @@ Every page must be a **complete, valid HTML document**:
 </head>
 <body>
 
+    <!--#wps-include fragment="site-header" -->
+
     <!-- page content here -->
+
+    <!--#wps-include fragment="site-footer" -->
 
     <!-- Optimizer - Footer Javascripts -->
 </body>
@@ -247,83 +313,161 @@ When creating or updating a page, you can pass these metadata fields:
 | `redirect_code` | — | 301 or 302 — turns page into a redirect |
 | `redirect_destination` | — | Full URL or relative path for redirect target |
 
-### Assets (Images)
+### Visual Editor (WPE) — Edit Without AI
 
-Upload images before referencing them in pages. Use the returned asset URL in `<img src="...">` tags.
+The Visual Editor allows website owners to make changes directly in their browser —
+no AI conversation needed. This is important: **users are not locked into AI for every update.**
 
-For new or placeholder visuals, use the **WPE Image Editor** — the user can upload and
-replace images visually in their browser via `create_edit_session`.
+What the Visual Editor supports:
+- **Upload and replace images** — click any placeholder, upload a photo, crop and position it
+- **Drag-and-drop reorder** — rearrange sections, cards, and content blocks visually
+- **Edit text and styles** — change colors, fonts, spacing directly on the page
+- **Lightbox preview** — full-size image viewing for galleries and portfolios
 
-#### ⚠️ Image Editor — verplichte aanpak voor placeholder afbeeldingen
+After edits, the user clicks "Save & Close" and changes are live immediately.
+No deployment, no AI, no code.
 
-Wanneer je een pagina bouwt met afbeelding-slots die de gebruiker later via de Image Editor
-invult, gelden deze strikte regels:
+**When to offer the Visual Editor:**
+- After building a website → always create an edit session for image replacement
+- When the user says "I want to rearrange the sections" → edit session
+- When the user says "I'll update the photos myself" → edit session with instructions
+- When handing off a finished site → mention that they can always edit visually
 
-**Regel 1 — Gebruik `data-wpe-slot` op elke `<img>` tag**
-De Image Editor gebruikt dit attribuut om de juiste img te identificeren bij upload.
-Zonder dit attribuut kan de editor de afbeelding niet vervangen.
+**How to create an edit session:**
+```
+create_edit_session(project_id: 12345, slug: "index")
+→ returns edit_url — share this with the user
+```
 
-**Regel 2 — De `src` MOET een werkende URL zijn**
-Een lege `src=""` of een 404-URL maakt de afbeelding onzichtbaar in de browser.
-De editor kan alleen klikken op images die daadwerkelijk renderen op de pagina.
-Gebruik altijd `https://placehold.co/` als placeholder — deze laadt gegarandeerd.
+After the session, retrieve what changed:
+```
+get_edit_session_changes(project_id: 12345, session_id: "...")
+→ returns list of changes made by the user
+```
 
-**Correct voorbeeld:**
+#### ⚠️ Placeholder images — mandatory rules for the Visual Editor
+
+When building pages with image slots for the Visual Editor, follow these strict rules:
+
+**Rule 1 — Use `data-wpe-slot` on every `<img>` tag**
+The editor uses this attribute to identify the correct img on upload.
+Without it, the editor cannot replace the image.
+
+**Rule 2 — The `src` MUST be a working URL**
+An empty `src=""` or a 404 URL makes the image invisible in the browser.
+The editor can only target images that actually render on the page.
+Always use `https://placehold.co/` as placeholder — it loads reliably.
+
+**Correct example:**
 ```html
 <img
-  src="https://placehold.co/800x600/D6EEF2/1B5E6B?text=Foto+omschrijving"
-  data-wpe-slot="unieke-slot-naam"
-  alt="Beschrijving"
-  id="unieke-slot-naam">
+  src="https://placehold.co/800x600/D6EEF2/1B5E6B?text=Photo+description"
+  data-wpe-slot="unique-slot-name"
+  alt="Description"
+  id="unique-slot-name">
 ```
 
-**Placehold.co formaat:** `https://placehold.co/{breedte}x{hoogte}/{achtergrond}/{tekst}?text={label}`
-Gebruik kleuren passend bij het kleurschema van de site zodat placeholders er verzorgd uitzien.
+**Placehold.co format:** `https://placehold.co/{width}x{height}/{background}/{text}?text={label}`
+Use colors matching the site's color scheme so placeholders look polished.
 
-**Nooit doen:**
+**Never do this:**
 ```html
-<!-- ❌ Lege src — onzichtbaar, niet klikbaar -->
-<img src="" data-wpe-slot="mijn-foto">
+<!-- ❌ Empty src — invisible, not clickable -->
+<img src="" data-wpe-slot="my-photo">
 
-<!-- ❌ Niet-bestaand pad — 404, onzichtbaar -->
-<img src="/assets/mijn-foto.jpg" data-wpe-slot="mijn-foto">
+<!-- ❌ Non-existent path — 404, invisible -->
+<img src="/assets/my-photo.jpg" data-wpe-slot="my-photo">
 ```
 
-**Na upload via de editor** wordt de `src` automatisch vervangen door de CDN URL
+**After upload via the editor** the `src` is automatically replaced by the CDN URL
 (`cdn.websitepublisher.ai/custom/wid{id}/images/...`).
 
-#### Image Editor workflow
+#### Common placeholder dimensions
 
-1. Bouw de pagina met werkende placehold.co src + `data-wpe-slot` op alle img tags
-2. Maak een edit sessie aan via `create_edit_session`
-3. Geef de gebruiker de `edit_url`
-4. De gebruiker klikt een placeholder aan, uploadt de echte foto → editor slaat op
-5. Na "Save & Close" is de pagina direct live (nginx cache wordt automatisch gepurged)
-
-#### Veelgebruikte placeholder-afmetingen
-
-| Gebruik | Afmeting |
+| Usage | Dimensions |
 |---|---|
-| Hero breed | 1200x675 |
-| Foto 4:3 | 800x600 |
-| Portret | 600x800 |
-| Logo nav | 240x48 |
+| Hero wide | 1200x675 |
+| Photo 4:3 | 800x600 |
+| Portrait | 600x800 |
+| Nav logo | 240x48 |
 | Team card | 600x520 |
 
-### Dynamic Data (MAPI)
+### Dynamic Data (MAPI) — Prefer Entities Over Static HTML
 
-Use MAPI when the website has **repeating structured content**: menu items, team members,
-portfolio projects, testimonials, blog posts, products, events.
+**Default to MAPI for any content that repeats, changes, or could grow.**
+Do not hardcode repeating content as static HTML — it becomes unmaintainable
+the moment the user wants to add, remove, or reorder items.
 
-1. Define an entity schema (e.g. "MenuItem" with fields: name, description, price, category)
-2. Create records for each item
-3. Fetch records in the page via JavaScript using the public MAPI endpoint
+**Always use MAPI for:**
 
-```javascript
-fetch('https://api.websitepublisher.ai/mapi/public/{project_id}/menuitems')
-  .then(r => r.json())
-  .then(data => { /* render items */ });
-```
+| Content type | Entity name | Example fields |
+|---|---|---|
+| Menu items | `menuitems` | name, description, price, category, sort_order |
+| Team members | `team` | name, role, bio, photo_url, sort_order |
+| Services / offerings | `services` | title, description, icon, price, sort_order |
+| Portfolio projects | `projects` | title, description, image_url, link, category, sort_order |
+| Testimonials / reviews | `testimonials` | name, role, company, quote, photo_url |
+| Blog posts | `posts` | title, slug, content, author, published_at, featured_image |
+| FAQ items | `faq` | question, answer, category, sort_order |
+| Events | `events` | title, date, location, description, registration_url |
+| Products (showcase) | `products` | name, description, price, image_url, category |
+
+**Use static HTML only for:**
+- One-off content that will never repeat (hero text, about page narrative)
+- Page structure and layout (sections, containers)
+- Content that is truly unique to a single page
+
+**How to build with MAPI:**
+
+1. Define the entity:
+   ```
+   create_entity(project_id: 12345, name: "services", plural_name: "services",
+     properties: [
+       { name: "title", type: "string", required: true },
+       { name: "description", type: "text" },
+       { name: "icon", type: "string" },
+       { name: "price", type: "string" },
+       { name: "sort_order", type: "number" }
+     ],
+     public_read: true
+   )
+   ```
+
+2. Create records:
+   ```
+   create_record(project_id: 12345, entity: "services", data: {
+     title: "Web Design", description: "...", icon: "🎨", price: "From €499", sort_order: 1
+   })
+   ```
+
+3. Fetch and render in the page:
+   ```javascript
+   fetch('https://api.websitepublisher.ai/mapi/public/{project_id}/services')
+     .then(r => r.json())
+     .then(data => {
+       const container = document.getElementById('services-grid');
+       data.data
+         .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+         .forEach(service => {
+           container.innerHTML += `
+             <div class="service-card">
+               <span class="service-icon">${service.icon}</span>
+               <h3>${service.title}</h3>
+               <p>${service.description}</p>
+               ${service.price ? `<span class="price">${service.price}</span>` : ''}
+             </div>`;
+         });
+     });
+   ```
+
+**Why this matters:**
+- User wants to add a team member → create one record, no HTML changes
+- User wants to reorder services → update sort_order values, no page edit needed
+- User wants to change a price → update one field, reflected everywhere
+- Different AI session continues the work → entities are the source of truth, not HTML
+
+**The rule:** If you find yourself writing the same HTML structure 3+ times with
+different content — stop, create a MAPI entity, and render dynamically.
 
 ---
 
@@ -503,6 +647,8 @@ Before handing over to the user, verify:
 - [ ] All pages that should be findable have `seo_robots_index: true`
 - [ ] All pages have `seo_title` and `seo_description`
 - [ ] All `<!-- Optimizer - ... -->` comment tags are present in every page
+- [ ] Multi-page sites use **fragments** for header and footer (not copy-pasted HTML)
+- [ ] Repeating content uses **MAPI entities** (not hardcoded static HTML)
 - [ ] Contact form (if any) uses the correct SAPI session/csrf pattern above
 - [ ] Thank-you page exists if form redirects after submit
 - [ ] Terms / privacy page exists if form collects personal data
@@ -510,6 +656,7 @@ Before handing over to the user, verify:
 - [ ] Design context saved via `execute_integration(service: "site_context")` for future consistency
 - [ ] Website URL shared with user: `https://{subdomain}.websitepublisher.ai`
 - [ ] Contact form includes `website: ''` honeypot field in the fields object
+- [ ] Visual Editor session offered for image replacement and final tweaks
 
 ---
 
@@ -532,11 +679,96 @@ Before handing over to the user, verify:
 | Feature | API |
 |---|---|
 | Pages and content | PAPI |
+| Reusable components (header, footer) | PAPI Fragments |
 | Dynamic data / entities | MAPI |
 | Contact forms | SAPI |
 | Third-party integrations | IAPI + VAPI |
-| Image editing | WPE (browser-based) |
+| Visual editing (browser) | WPE |
 | Clone a website | WAPI clone endpoint |
+
+---
+
+## Built-in Integrations — Don't Reinvent the Wheel
+
+WebsitePublisher includes pre-built integrations for common website needs.
+You do not need to build email sending, payment processing, or SMS from scratch.
+Each integration is a single tool call — credentials are stored securely in the Vault,
+the platform handles authentication, rate limiting, and error handling.
+
+### Available Integrations
+
+| Service | Category | What it does | Tool call |
+|---|---|---|---|
+| **Resend** | Email | Transactional emails (contact forms, notifications) | `execute_integration(service: "resend", endpoint: "send-email")` |
+| **Mailgun** | Email | Domain-level email sending | `execute_integration(service: "mailgun", endpoint: "send-email")` |
+| **SendGrid** | Email | High-volume email delivery | `execute_integration(service: "sendgrid", endpoint: "send-email")` |
+| **Stripe** | Payments | Checkout sessions, payment processing | `execute_integration(service: "stripe", endpoint: "create-checkout-session")` |
+| **Mollie** | Payments | European payments (iDEAL, Bancontact, cards) | `execute_integration(service: "mollie", endpoint: "create-payment")` |
+| **Twilio** | SMS | Text messages (confirmations, alerts) | `execute_integration(service: "twilio", endpoint: "send-sms")` |
+| **Lead Capture** | Built-in | Store form submissions as leads | Form action `{"type": "leads"}` |
+| **Admin Auth** | Built-in | Password-protected pages / member areas | SAPI visitor auth flow |
+| **Site Context** | Built-in | Store design decisions across sessions | `execute_integration(service: "site_context", endpoint: "set-context")` |
+
+### How integrations work
+
+1. **Setup** — Store the API key: `setup_integration(service: "resend", secrets: {"resend_api_key": "re_..."})`
+2. **Use** — Call the integration: `execute_integration(service: "resend", endpoint: "send-email", input: {...})`
+3. **Done** — The platform resolves credentials, validates input, proxies the request, returns the result
+
+API keys are **never exposed** to the AI or the browser. The Vault encrypts them at rest
+and the integration proxy resolves them server-side at execution time.
+
+### When to use integrations
+
+| User wants... | Use this |
+|---|---|
+| Contact form that sends email | SAPI form + Resend integration |
+| Accept payments on website | Stripe or Mollie integration |
+| SMS confirmation after booking | Twilio integration |
+| Store leads from multiple forms | Built-in Lead Capture |
+| Password-protected member area | Admin Auth (SAPI visitor auth) |
+| Remember design choices across sessions | Site Context integration |
+
+**Always check if an integration exists before building custom solutions.**
+The built-in integrations handle authentication, error handling, rate limiting,
+and security — reimplementing these is unnecessary and error-prone.
+
+---
+
+## AI Continuity — Staying on Track Across Sessions
+
+AI assistants typically lose all context when a conversation ends.
+WebsitePublisher solves this with infrastructure layers that preserve knowledge:
+
+### Skills (this document)
+You are reading a skill right now. Skills are structured instructions that teach AI
+how to work with the platform — which patterns to follow, which mistakes to avoid,
+and which tools to use. Without skills, every AI session would rediscover
+how the platform works from scratch.
+
+**Always call `get_skill` at the start of a session.** It ensures you follow current
+best practices, regardless of which AI platform the user is on.
+
+### Design Context (site_context integration)
+Design decisions (colors, fonts, style direction) are stored per project via the
+`site_context` integration. When a new AI session starts, call `get_project_status`
+to retrieve the stored design context — this ensures visual consistency even when
+a different AI or a different conversation continues the work.
+
+### Scheduled Tasks (AAPI)
+Websites sometimes need automated actions: publish a page at a specific time,
+send a weekly email digest, update data records on a schedule. The AAPI layer
+handles this without requiring the AI or the user to be present.
+
+Available via: `create_scheduled_task`, `list_scheduled_tasks`
+
+### Visual Editor (WPE)
+The user does not need to start a new AI conversation for every small change.
+The Visual Editor lets them update images, reorder content, and adjust styles
+directly in their browser — at any time, without AI involvement.
+
+These layers ensure that the **quality and consistency of the website do not depend
+on which AI session is active.** The platform remembers — the AI doesn't have to.
 
 ---
 
