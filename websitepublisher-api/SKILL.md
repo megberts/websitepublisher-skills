@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.8"
+  version: "1.9"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -498,120 +498,96 @@ configure_form(
 )
 ```
 
-### Step 2 — The JavaScript snippet (copy-paste, replace PROJECT_ID)
+### Step 2 — Add the CDN script + form handler to the page
 
-**This is the only correct pattern.** Do not use cookies. Do not omit `_csrf`. Do not omit `X-Session-Id`.
+**Always use the CDN library.** Do not write inline session management code.
+The library handles sessions, CSRF tokens, stale session recovery, and all headers automatically.
 
-```javascript
-(function() {
-  const SAPI = 'https://api.websitepublisher.ai/sapi/project/PROJECT_ID';
+```html
+<script src="https://cdn.websitepublisher.ai/js/sapi-client.js"></script>
+<script>
+  var sapi = WP.sapi(PROJECT_ID);
 
-  // Fetch or reuse session — stores BOTH session_id and csrf_token in sessionStorage.
-  // sessionStorage is Safari ITP-proof: it's first-party and never blocked.
-  async function getSession() {
-    const storedId   = sessionStorage.getItem('wp_session_id');
-    const storedCsrf = sessionStorage.getItem('wp_csrf_token');
-    // Reuse if both present
-    if (storedId && storedCsrf) {
-      return { session_id: storedId, csrf_token: storedCsrf };
-    }
-    try {
-      const headers = storedId ? { 'X-Session-Id': storedId } : {};
-      const res  = await fetch(SAPI + '/session', { headers });
-      const json = await res.json();
-      if (json.success && json.data && json.data.session_id) {
-        sessionStorage.setItem('wp_session_id',  json.data.session_id);
-        sessionStorage.setItem('wp_csrf_token',  json.data.csrf_token);
-        return { session_id: json.data.session_id, csrf_token: json.data.csrf_token };
-      }
-    } catch (e) {}
-    return null;
-  }
-
-  // Pre-fetch session on page load so it's ready when user submits
-  getSession();
-
-  document.getElementById('my-form').addEventListener('submit', async function(e) {
+  document.getElementById('my-form').addEventListener('submit', function(e) {
     e.preventDefault();
+    var btn = this.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
 
-    const session = await getSession();
-    if (!session) {
-      alert('Session error — please refresh the page and try again.');
-      return;
-    }
-
-    const res = await fetch(SAPI + '/form/submit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Session-Id': session.session_id   // ← required, not a cookie
-      },
-      body: JSON.stringify({
-        _csrf:     session.csrf_token,        // ← required, server rejects without it
-        form_name: 'contact',
-        fields: {
-          name:    document.getElementById('name').value.trim(),
-          email:   document.getElementById('email').value.trim(),
-          message: document.getElementById('message').value.trim(),
-          website: '',  // ← honeypot: leave empty, bots fill this in
-        }
-      })
+    sapi.submitForm('contact', {
+      name:    document.getElementById('name').value.trim(),
+      email:   document.getElementById('email').value.trim(),
+      message: document.getElementById('message').value.trim(),
+      website: '',  // honeypot: leave empty, bots fill this in
+    }).then(function(r) {
+      if (r.ok) {
+        window.location.href = '/thank-you';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Send';
+        alert(r.data.error && r.data.error.message || 'Something went wrong.');
+      }
     });
-
-    const data = await res.json();
-    if (res.ok && data.success) {
-      // Clear csrf after use — fresh token fetched on next submit
-      sessionStorage.removeItem('wp_csrf_token');
-      window.location.href = '/thank-you'; // or show inline success message
-    } else {
-      alert(data.error?.message || 'Something went wrong. Please try again.');
-    }
   });
-})();
+</script>
 ```
 
-### Key rules — never forget these:
+### What the CDN library handles for you
+
+| Feature | How |
+|---|---|
+| Session creation + resume | `WP.sapi(PROJECT_ID)` pre-warms on init |
+| CSRF token management | Sent via `X-CSRF-Token` header + `_csrf` body (dual) |
+| Session ID header | `X-Session-Id` header on every request |
+| Stale session recovery | 401 response -> auto-clear -> fresh session -> retry (max 1) |
+| Per-project storage keys | `wp_{projectId}_sid` -- no cross-site conflicts |
+| Safari ITP compatibility | Uses sessionStorage (first-party, never blocked) |
+| Auth state preservation | After successful POST, only CSRF is cleared -- session ID survives |
+
+### Key rules -- never forget these:
 
 | Rule | Why |
 |---|---|
-| Session response is at `json.data.session_id` (nested) | Not `json.session_id` — always unwrap `.data` |
-| Store **both** `session_id` AND `csrf_token` | Both are returned in the same response |
-| Send `X-Session-Id` header on **both** the session GET and the form POST | Safari blocks third-party cookies entirely |
-| Include `_csrf` in the **request body** | Server validates it — request fails without it |
-| Clear `csrf_token` from sessionStorage after a successful submit | CSRF tokens are single-use; fetch fresh on next submit |
-| Pre-fetch session on page load | Avoids delay when user clicks submit |
-| Always include `website: ''` in the fields object | Honeypot field — bots fill it in, humans leave it empty. Server silently drops the submission if non-empty |
-| Never pre-fill the honeypot field | An empty string is required — any value triggers bot detection |
+| Always include `website: ''` in the fields object | Honeypot field -- bots fill it in, humans leave it empty. Server silently drops the submission if non-empty |
+| Never pre-fill the honeypot field | An empty string is required -- any value triggers bot detection |
+| Replace `PROJECT_ID` with the actual numeric project ID | The library uses this to scope sessions and build API URLs |
 
 ### Forms with File Upload
 
 Forms can accept image uploads from visitors via the SAPI upload endpoint.
-Uploads are stored as project assets on the CDN — no bearer token needed.
+Uploads are stored as project assets on the CDN -- no bearer token needed.
 
-**Flow:** upload file(s) first → collect CDN URLs → include in form submit fields.
+**Flow:** upload file(s) first -> collect CDN URLs -> include in form submit fields.
 
 ```javascript
-// Upload a file — returns CDN URL + fresh CSRF token
-async function uploadFile(file, session) {
-  const form = new FormData();
+// Upload a file using the CDN library
+var sapi = WP.sapi(PROJECT_ID);
+
+async function uploadFile(file) {
+  // getSession() handles caching + resume automatically
+  var session = await sapi.getSession();
+
+  var form = new FormData();
   form.append('file', file);
   form.append('_csrf', session.csrf_token);
-  form.append('form_name', 'intake');  // optional, for traceability
+  form.append('form_name', 'intake');
 
-  const res = await fetch(SAPI + '/form/upload', {
-    method: 'POST',
-    headers: { 'X-Session-Id': session.session_id },
-    body: form   // no Content-Type header — browser sets multipart boundary
-  });
+  var res = await fetch(
+    'https://api.websitepublisher.ai/sapi/project/' + PROJECT_ID + '/form/upload',
+    {
+      method: 'POST',
+      headers: { 'X-Session-Id': session.session_id },
+      body: form   // no Content-Type header -- browser sets multipart boundary
+    }
+  );
 
-  const data = await res.json();
+  var data = await res.json();
   if (data.success) {
-    // IMPORTANT: update stored CSRF — tokens are single-use
-    sessionStorage.setItem('wp_csrf_token', data.data.new_csrf_token);
-    session.csrf_token = data.data.new_csrf_token;
+    // Clear stored CSRF -- the library will fetch a fresh one on next call
+    sapi.clearSession();
     return data.data.asset_url;   // CDN URL ready for use
   }
-  throw new Error(data.error?.message || 'Upload failed');
+  throw new Error(data.error && data.error.message || 'Upload failed');
 }
 ```
 
@@ -622,19 +598,19 @@ async function uploadFile(file, session) {
 | Allowed types | JPEG, PNG, WebP only |
 | Max file size | 5 MB per file |
 | Max per session | 10 uploads |
-| CSRF | Single-use — use `new_csrf_token` from response for next call |
+| CSRF | Single-use -- library handles refresh automatically for submitForm(), manual clear needed after raw fetch upload |
 | Response includes | `asset_url`, `filename`, `mime_type`, `size`, `width`, `height`, `uploads_remaining` |
 
 **Include uploaded URLs in form submit:**
 ```javascript
 // After uploading, pass CDN URLs as regular form fields
-fields: {
+sapi.submitForm('intake', {
   name: '...',
   email: '...',
   image_url_1: uploadedUrl1,  // CDN URL from upload response
   image_url_2: uploadedUrl2,
   website: '',  // honeypot
-}
+});
 ```
 
 ---
@@ -649,7 +625,7 @@ Before handing over to the user, verify:
 - [ ] All `<!-- Optimizer - ... -->` comment tags are present in every page
 - [ ] Multi-page sites use **fragments** for header and footer (not copy-pasted HTML)
 - [ ] Repeating content uses **MAPI entities** (not hardcoded static HTML)
-- [ ] Contact form (if any) uses the correct SAPI session/csrf pattern above
+- [ ] Contact form (if any) uses the CDN library (`sapi-client.js`) — no inline session code
 - [ ] Thank-you page exists if form redirects after submit
 - [ ] Terms / privacy page exists if form collects personal data
 - [ ] Design uses distinctive typography and cohesive color palette (not generic AI defaults)
