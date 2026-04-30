@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.9"
+  version: "2.0"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -172,7 +172,7 @@ If the user has not specified a style preference, choose a bold direction and co
 ### Project Setup
 
 1. Get available projects: use `list_projects`
-2. If no project exists or user wants a new one: create it via the dashboard or WAPI
+2. If no project exists or user wants a new one: use `create_project` with a name (and optional subdomain)
 3. Note the `project_id` — used in every subsequent call
 4. **Check design context:** call `get_project_status` — if `design_context` is set, use those colors, fonts, and style notes as the foundation for all pages you build. If `design_context` is null, ask the user for their preferred colors, fonts, and style direction during intake, then save it:
    ```
@@ -763,6 +763,7 @@ Dashboard:         https://api.websitepublisher.ai/dapi/
 ### Key PAPI Endpoints
 ```
 GET    /papi/projects                           List projects
+POST   /papi/projects                           Create project
 GET    /papi/project/{id}/pages                 List pages
 POST   /papi/project/{id}/pages                 Create page
 PUT    /papi/project/{id}/pages/{slug}          Update page
