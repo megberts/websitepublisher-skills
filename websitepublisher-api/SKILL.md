@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "2.0"
+  version: "2.1"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -440,7 +440,34 @@ the moment the user wants to add, remove, or reorder items.
    })
    ```
 
-3. Fetch and render in the page:
+3. **Render with SSR (preferred — SEO-friendly):**
+
+   Use `<!--#wps-mapi -->` template tags in your HTML. The platform renders entity data
+   server-side before delivering the page, so search engines see full content immediately.
+
+   ```html
+   <!--#wps-mapi entity="services" sort="sort_order:asc" -->
+   <div class="service-card">
+     <span class="service-icon">{{icon}}</span>
+     <h3>{{title}}</h3>
+     <p>{{description | truncate:150}}</p>
+     {{#if price}}
+       <span class="price">{{price}}</span>
+     {{/if}}
+   </div>
+   <!--#wps-mapi-empty -->
+   <p>No services available yet.</p>
+   <!--#/wps-mapi -->
+   ```
+
+   This is the **default choice** for rendering MAPI data. Always use SSR unless the page
+   needs interactive features like client-side search, filtering, or live updates.
+
+4. Render with JavaScript (only when interactivity is needed):
+
+   Use client-side `fetch()` when the user needs to search, filter, or sort dynamically
+   **in the browser**. SSR and JS can coexist on the same page.
+
    ```javascript
    fetch('https://api.websitepublisher.ai/mapi/public/{project_id}/services')
      .then(r => r.json())
@@ -454,20 +481,206 @@ the moment the user wants to add, remove, or reorder items.
                <span class="service-icon">${service.icon}</span>
                <h3>${service.title}</h3>
                <p>${service.description}</p>
-               ${service.price ? `<span class="price">${service.price}</span>` : ''}
              </div>`;
          });
      });
    ```
 
+### MAPI SSR — Template Reference
+
+SSR uses Handlebars-inspired syntax processed server-side by the Optimizer.
+The data is embedded directly in the HTML — no JavaScript needed, fully indexable by search engines.
+
+#### Basic Syntax
+
+```
+{{field}}              → HTML-escaped output
+{{{field}}}            → Raw output (for HTML content fields)
+{{field | filter}}     → Apply a filter
+{{field | filter:arg}} → Filter with argument
+{{nested.field}}       → Dot notation for JSON fields
+```
+
+#### Tag Attributes
+
+```html
+<!--#wps-mapi
+  entity="products"           Required: entity name
+  sort="price:asc"            Optional: field:asc or field:desc
+  limit="50"                  Optional: max records (default: 100, max: 500)
+  offset="0"                  Optional: skip N records
+  filter="category:shoes"     Optional: field:value pairs, ; separated
+  wrap="div"                  Optional: wrapper element (default: div)
+  wrap-class="product-grid"   Optional: CSS class on wrapper
+-->
+```
+
+Multiple filters: `filter="category:shoes;in_stock:1;featured:1"`
+
+#### Conditionals
+
+```html
+{{#if field}}
+  Shown when field is truthy (not null, not empty, not 0)
+{{#else}}
+  Shown when field is falsy
+{{/if}}
+
+{{#unless field}}
+  Shown when field is falsy (inverse of #if)
+{{/unless}}
+```
+
+Comparison operators:
+```html
+{{#if price > 100}}         Greater than
+{{#if stock == 0}}          Equals
+{{#if status != "draft"}}   Not equals
+{{#if rating >= 4}}         Greater or equal
+{{#if category == "sale"}}  String comparison
+```
+
+#### Loop Metadata
+
+Inside the `<!--#wps-mapi -->` block, these variables are available:
+
+```
+{{@index}}   → 0-based index
+{{@number}}  → 1-based number
+{{@first}}   → true if first item
+{{@last}}    → true if last item
+{{@count}}   → total items rendered
+{{@even}}    → true if even index
+{{@odd}}     → true if odd index
+```
+
+#### Nested Loops (array fields)
+
+For JSON array fields within a record:
+
+```html
+{{#each images}}
+  <img src="{{this}}" alt="Photo">
+{{/each}}
+
+{{#each specs}}
+  <dt>{{this.label}}</dt>
+  <dd>{{this.value}}</dd>
+{{/each}}
+```
+
+#### Available Filters
+
+| Filter | Example | Output |
+|---|---|---|
+| `truncate:N` | `{{text \| truncate:120}}` | Cuts at word boundary, adds "..." |
+| `upper` | `{{name \| upper}}` | UPPERCASE |
+| `lower` | `{{name \| lower}}` | lowercase |
+| `capitalize` | `{{name \| capitalize}}` | First letter uppercase |
+| `number:N` | `{{price \| number:2}}` | Formatted number (comma decimal, dot thousands) |
+| `multiply:N` | `{{cents \| multiply:0.01}}` | Multiply value |
+| `add:N` / `subtract:N` | `{{price \| add:5}}` | Arithmetic |
+| `round:N` | `{{rating \| round:1}}` | Round to N decimals |
+| `currency:CODE` | `{{price \| currency:EUR}}` | "€ 29,95" |
+| `date:FORMAT` | `{{created_at \| date:d-m-Y}}` | Formatted date |
+| `date:relative` | `{{created_at \| date:relative}}` | "2 dagen geleden" |
+| `default:VALUE` | `{{bio \| default:No bio}}` | Fallback if empty |
+| `striptags` | `{{html \| striptags}}` | Strip HTML tags |
+| `slug` | `{{title \| slug}}` | URL-safe slug |
+| `count` / `length` | `{{items \| count}}` | Array/string length |
+
+Filters can be chained: `{{price | multiply:0.01 | number:2}}`
+
+#### Empty State
+
+```html
+<!--#wps-mapi entity="products" filter="category:sale" -->
+<div class="product">{{name}} — {{price}}</div>
+<!--#wps-mapi-empty -->
+<p>No products on sale right now.</p>
+<!--#/wps-mapi -->
+```
+
+#### Single Record Mode
+
+Render one specific record by ID or field match:
+
+```html
+<!--#wps-mapi entity="products" record="42" match="id" -->
+<h1>{{name}}</h1>
+<p>{{description}}</p>
+<!--#/wps-mapi -->
+```
+
+#### Complete Examples
+
+**Product grid (webshop):**
+```html
+<!--#wps-mapi entity="products" sort="name:asc" filter="active:1" -->
+<div class="product-card {{#if featured}}featured{{/if}}">
+  <a href="/products/{{slug}}">
+    <img src="{{image | default:https://placehold.co/400x300}}" alt="{{name}}">
+    <h3>{{name}}</h3>
+    <p>{{description | truncate:100}}</p>
+    {{#if sale_price}}
+      <span class="original">{{price | multiply:0.01 | currency:EUR}}</span>
+      <span class="sale">{{sale_price | multiply:0.01 | currency:EUR}}</span>
+    {{#else}}
+      <span class="price">{{price | multiply:0.01 | currency:EUR}}</span>
+    {{/if}}
+  </a>
+</div>
+<!--#/wps-mapi -->
+```
+
+**Blog post list:**
+```html
+<!--#wps-mapi entity="posts" sort="published_at:desc" limit="10" filter="status:published" -->
+<article>
+  <time>{{published_at | date:d M Y}}</time>
+  <h2><a href="/blog/{{slug}}">{{title}}</a></h2>
+  <p>{{content | striptags | truncate:200}}</p>
+  {{#if author}}<span>By {{author}}</span>{{/if}}
+</article>
+<!--#/wps-mapi -->
+```
+
+**Team page:**
+```html
+<!--#wps-mapi entity="team" sort="sort_order:asc" -->
+<div class="team-member">
+  <img src="{{photo | default:https://placehold.co/300x300}}" alt="{{name}}">
+  <h3>{{name}}</h3>
+  <p class="role">{{role}}</p>
+  {{#if bio}}<p>{{bio | truncate:200}}</p>{{/if}}
+</div>
+<!--#/wps-mapi -->
+```
+
+### When to use SSR vs JavaScript
+
+| Scenario | Use |
+|---|---|
+| Product list, blog overview, team page, menu | **SSR** — content must be indexable |
+| FAQ section, testimonials, portfolio grid | **SSR** — static content, SEO matters |
+| Client-side search/filter | **JS** — user interaction required |
+| Live price updates, stock status | **JS** — real-time data needed |
+| Shopping cart, wishlist | **JS** — user-specific state |
+| Product list WITH search bar | **Both** — SSR for initial load + SEO, JS for search |
+
+**The rule:** Default to SSR. Only add client-side JavaScript when the user needs
+to interact with the data (search, filter, sort, add to cart). SSR and JS can coexist —
+use SSR for the initial server-rendered content and JS for the interactive enhancement.
+
 **Why this matters:**
-- User wants to add a team member → create one record, no HTML changes
+- User wants to add a team member → create one record, no HTML changes needed
 - User wants to reorder services → update sort_order values, no page edit needed
 - User wants to change a price → update one field, reflected everywhere
+- Google indexes all products instantly → no second-wave JavaScript rendering needed
 - Different AI session continues the work → entities are the source of truth, not HTML
 
 **The rule:** If you find yourself writing the same HTML structure 3+ times with
-different content — stop, create a MAPI entity, and render dynamically.
+different content — stop, create a MAPI entity, and render with SSR.
 
 ---
 
