@@ -1,18 +1,18 @@
 ---
 name: websitepublisher-api
 description: >
-  Build and publish websites through conversation using WebsitePublisher.ai.
-  Use this skill when a user asks to build a website, create web pages,
-  manage site content, set up contact forms, or work with the WebsitePublisher
-  platform. Covers all API layers: PAPI (pages/assets), MAPI (entities/data),
-  SAPI (forms), VAPI (credentials), IAPI (integrations), and the WPE Visual Editor.
+   Build and publish websites through conversation using WebsitePublisher.ai.
+   Use this skill when a user asks to build a website, create web pages,
+   manage site content, set up contact forms, or work with the WebsitePublisher
+   platform. Covers all API layers: PAPI (pages/assets), MAPI (entities/data),
+   SAPI (forms), VAPI (credentials), IAPI (integrations), and the WPE Visual Editor.
 license: MIT
 metadata:
-  author: websitepublisher-ai
-  version: "2.2"
-  website: https://www.websitepublisher.ai
-  docs: https://www.websitepublisher.ai/docs
-  mcp: https://mcp.websitepublisher.ai
+   author: websitepublisher-ai
+   version: "2.3"
+   website: https://www.websitepublisher.ai
+   docs: https://www.websitepublisher.ai/docs
+   mcp: https://mcp.websitepublisher.ai
 ---
 
 # WebsitePublisher.ai — Agent Skill
@@ -255,23 +255,23 @@ Every page must be a **complete, valid HTML document**:
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Title</title>
-    <!-- Optimizer - Canonical -->
-    <!-- Optimizer - Custom Meta -->
-    <!-- Optimizer - Open Graph -->
-    <!-- Optimizer - Header Javascripts -->
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Page Title</title>
+   <!-- Optimizer - Canonical -->
+   <!-- Optimizer - Custom Meta -->
+   <!-- Optimizer - Open Graph -->
+   <!-- Optimizer - Header Javascripts -->
 </head>
 <body>
 
-    <!--#wps-include fragment="site-header" -->
+<!--#wps-include fragment="site-header" -->
 
-    <!-- page content here -->
+<!-- page content here -->
 
-    <!--#wps-include fragment="site-footer" -->
+<!--#wps-include fragment="site-footer" -->
 
-    <!-- Optimizer - Footer Javascripts -->
+<!-- Optimizer - Footer Javascripts -->
 </body>
 </html>
 ```
@@ -287,17 +287,17 @@ When creating or updating a page, you can pass these metadata fields:
 
 ```json
 {
-  "slug": "about",
-  "content": "<!DOCTYPE html>...",
-  "meta": {
-    "seo_title": "About Us — Company Name",
-    "seo_description": "We are a ...",
-    "seo_keywords": "keyword1, keyword2",
-    "seo_robots_index": true,
-    "seo_robots_follow": true,
-    "page_language": "en",
-    "landingpage": false
-  }
+   "slug": "about",
+   "content": "<!DOCTYPE html>...",
+   "meta": {
+      "seo_title": "About Us — Company Name",
+      "seo_description": "We are a ...",
+      "seo_keywords": "keyword1, keyword2",
+      "seo_robots_index": true,
+      "seo_robots_follow": true,
+      "page_language": "en",
+      "landingpage": false
+   }
 }
 ```
 
@@ -312,6 +312,14 @@ When creating or updating a page, you can pass these metadata fields:
 | `landingpage` | false | Set true to make this the homepage |
 | `redirect_code` | — | 301 or 302 — turns page into a redirect |
 | `redirect_destination` | — | Full URL or relative path for redirect target |
+
+> **Note about `landingpage: true`** — when set, the platform serves the page at `/`
+> AND 301-redirects its slug (e.g. `/dashboard`, `/index.html`) to `/`. This affects
+> any client-side `window.location.replace()` call: redirect to **`/`**, not to the
+> page slug, or you create a redirect loop.
+>
+> Common pitfall: after admin login, `replace('/dashboard')` loops if `/dashboard`
+> is `landingpage: true`. Use `replace('/')` instead.
 
 ### Visual Editor (WPE) — Edit Without AI
 
@@ -361,10 +369,10 @@ Always use `https://placehold.co/` as placeholder — it loads reliably.
 **Correct example:**
 ```html
 <img
-  src="https://placehold.co/800x600/D6EEF2/1B5E6B?text=Photo+description"
-  data-wpe-slot="unique-slot-name"
-  alt="Description"
-  id="unique-slot-name">
+        src="https://placehold.co/800x600/D6EEF2/1B5E6B?text=Photo+description"
+        data-wpe-slot="unique-slot-name"
+        alt="Description"
+        id="unique-slot-name">
 ```
 
 **Placehold.co format:** `https://placehold.co/{width}x{height}/{background}/{text}?text={label}`
@@ -649,10 +657,10 @@ Render one specific record by ID or field match:
 ```html
 <!--#wps-mapi entity="team" sort="sort_order:asc" -->
 <div class="team-member">
-  <img src="{{photo | default:https://placehold.co/300x300}}" alt="{{name}}">
-  <h3>{{name}}</h3>
-  <p class="role">{{role}}</p>
-  {{#if bio}}<p>{{bio | truncate:200}}</p>{{/if}}
+   <img src="{{photo | default:https://placehold.co/300x300}}" alt="{{name}}">
+   <h3>{{name}}</h3>
+   <p class="role">{{role}}</p>
+   {{#if bio}}<p>{{bio | truncate:200}}</p>{{/if}}
 </div>
 <!--#/wps-mapi -->
 ```
@@ -719,29 +727,29 @@ The library handles sessions, CSRF tokens, stale session recovery, and all heade
 ```html
 <script src="https://cdn.websitepublisher.ai/js/sapi-client.js"></script>
 <script>
-  var sapi = WP.sapi(PROJECT_ID);
+   var sapi = WP.sapi(PROJECT_ID);
 
-  document.getElementById('my-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    var btn = this.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    btn.textContent = 'Sending...';
+   document.getElementById('my-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = this.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
 
-    sapi.submitForm('contact', {
-      name:    document.getElementById('name').value.trim(),
-      email:   document.getElementById('email').value.trim(),
-      message: document.getElementById('message').value.trim(),
-      website: '',  // honeypot: leave empty, bots fill this in
-    }).then(function(r) {
-      if (r.ok) {
-        window.location.href = '/thank-you';
-      } else {
-        btn.disabled = false;
-        btn.textContent = 'Send';
-        alert(r.data.error && r.data.error.message || 'Something went wrong.');
-      }
-    });
-  });
+      sapi.submitForm('contact', {
+         name:    document.getElementById('name').value.trim(),
+         email:   document.getElementById('email').value.trim(),
+         message: document.getElementById('message').value.trim(),
+         website: '',  // honeypot: leave empty, bots fill this in
+      }).then(function(r) {
+         if (r.ok) {
+            window.location.href = '/thank-you';
+         } else {
+            btn.disabled = false;
+            btn.textContent = 'Send';
+            alert(r.data.error && r.data.error.message || 'Something went wrong.');
+         }
+      });
+   });
 </script>
 ```
 
@@ -777,30 +785,30 @@ Uploads are stored as project assets on the CDN -- no bearer token needed.
 var sapi = WP.sapi(PROJECT_ID);
 
 async function uploadFile(file) {
-  // getSession() handles caching + resume automatically
-  var session = await sapi.getSession();
+   // getSession() handles caching + resume automatically
+   var session = await sapi.getSession();
 
-  var form = new FormData();
-  form.append('file', file);
-  form.append('_csrf', session.csrf_token);
-  form.append('form_name', 'intake');
+   var form = new FormData();
+   form.append('file', file);
+   form.append('_csrf', session.csrf_token);
+   form.append('form_name', 'intake');
 
-  var res = await fetch(
-    'https://api.websitepublisher.ai/sapi/project/' + PROJECT_ID + '/form/upload',
-    {
-      method: 'POST',
-      headers: { 'X-Session-Id': session.session_id },
-      body: form   // no Content-Type header -- browser sets multipart boundary
-    }
-  );
+   var res = await fetch(
+           'https://api.websitepublisher.ai/sapi/project/' + PROJECT_ID + '/form/upload',
+           {
+              method: 'POST',
+              headers: { 'X-Session-Id': session.session_id },
+              body: form   // no Content-Type header -- browser sets multipart boundary
+           }
+   );
 
-  var data = await res.json();
-  if (data.success) {
-    // Clear stored CSRF -- the library will fetch a fresh one on next call
-    sapi.clearSession();
-    return data.data.asset_url;   // CDN URL ready for use
-  }
-  throw new Error(data.error && data.error.message || 'Upload failed');
+   var data = await res.json();
+   if (data.success) {
+      // Clear stored CSRF -- the library will fetch a fresh one on next call
+      sapi.clearSession();
+      return data.data.asset_url;   // CDN URL ready for use
+   }
+   throw new Error(data.error && data.error.message || 'Upload failed');
 }
 ```
 
@@ -818,11 +826,11 @@ async function uploadFile(file) {
 ```javascript
 // After uploading, pass CDN URLs as regular form fields
 sapi.submitForm('intake', {
-  name: '...',
-  email: '...',
-  image_url_1: uploadedUrl1,  // CDN URL from upload response
-  image_url_2: uploadedUrl2,
-  website: '',  // honeypot
+   name: '...',
+   email: '...',
+   image_url_1: uploadedUrl1,  // CDN URL from upload response
+   image_url_2: uploadedUrl2,
+   website: '',  // honeypot
 });
 ```
 
@@ -945,47 +953,50 @@ SAPI Visitor Auth — they serve different purposes.
 const PROJECT_ID = 12345; // replace with actual project ID
 
 async function login(email, password) {
-  const r = await fetch(`/iapi/project/${PROJECT_ID}/admin-auth/login`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({email, password})
-  });
-  const data = await r.json();
-  if (data.success && data.token) {
-    sessionStorage.setItem('admin_token', data.token);
-    localStorage.setItem('admin_token', data.token);
-    document.cookie = `admin_token=${data.token}; path=/; max-age=28800; SameSite=Lax`;
-  }
-  return data;
+   const r = await fetch(`/iapi/project/${PROJECT_ID}/admin-auth/login`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password})
+   });
+   const data = await r.json();
+   if (data.success && data.token) {
+      sessionStorage.setItem('admin_token', data.token);
+      localStorage.setItem('admin_token', data.token);
+      document.cookie = `admin_token=${data.token}; path=/; max-age=28800; SameSite=Lax`;
+   }
+   return data;
 }
 ```
 
 Triple storage (sessionStorage + localStorage + cookie) ensures the token survives
 page navigations, tab reopens, and server-side middleware checks.
 
+After login, redirect to **`/`** if your dashboard page is set as `landingpage: true`.
+See the note about `landingpage` under Page Metadata.
+
 ### Admin-Only IAPI Calls
 
 ```javascript
 async function callAdmin(service, endpoint, payload) {
-  const token = sessionStorage.getItem('admin_token');
-  if (!token) { window.location.replace('/login'); return; }
+   const token = sessionStorage.getItem('admin_token');
+   if (!token) { window.location.replace('/login'); return; }
 
-  const r = await fetch(`/iapi/project/${PROJECT_ID}/${service}/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + token
-    },
-    body: JSON.stringify(payload)
-  });
+   const r = await fetch(`/iapi/project/${PROJECT_ID}/${service}/${endpoint}`, {
+      method: 'POST',
+      headers: {
+         'Content-Type': 'application/json',
+         'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify(payload)
+   });
 
-  if (r.status === 401) {
-    sessionStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_token');
-    window.location.replace('/login');
-    return;
-  }
-  return r.json();
+   if (r.status === 401) {
+      sessionStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_token');
+      window.location.replace('/login');
+      return;
+   }
+   return r.json();
 }
 
 // Usage:
@@ -1001,10 +1012,10 @@ is for visitor sessions. Admin calls use `Authorization: Bearer` headers on `/ia
 ```html
 <body>
 <script>
-  // Immediate redirect — no hidden body, no async check
-  var token = sessionStorage.getItem('admin_token')
+   // Immediate redirect — no hidden body, no async check
+   var token = sessionStorage.getItem('admin_token')
            || localStorage.getItem('admin_token');
-  if (!token) window.location.replace('/login');
+   if (!token) window.location.replace('/login');
 </script>
 
 <!-- page content renders immediately for authenticated users -->
@@ -1018,7 +1029,7 @@ is for visitor sessions. Admin calls use `Authorization: Bearer` headers on `/ia
 <!-- ❌ FORBIDDEN — causes flash of invisible content, breaks on slow connections -->
 <body style="visibility:hidden">
 <script>
-  checkAuth().then(() => document.body.style.visibility = 'visible');
+   checkAuth().then(() => document.body.style.visibility = 'visible');
 </script>
 ```
 
@@ -1030,10 +1041,10 @@ clears storage and redirects to login.
 
 ```javascript
 function logout() {
-  sessionStorage.removeItem('admin_token');
-  localStorage.removeItem('admin_token');
-  document.cookie = 'admin_token=; path=/; max-age=0';
-  window.location.replace('/login');
+   sessionStorage.removeItem('admin_token');
+   localStorage.removeItem('admin_token');
+   document.cookie = 'admin_token=; path=/; max-age=0';
+   window.location.replace('/login');
 }
 ```
 
@@ -1176,9 +1187,9 @@ Never ask for routing files to find the leads endpoint — the URL above is cano
 **Configure lead capture on a form:**
 ```json
 {
-  "form_name": "contact",
-  "actions": [{"type": "leads"}],
-  "required_fields": ["name", "email"]
+   "form_name": "contact",
+   "actions": [{"type": "leads"}],
+   "required_fields": ["name", "email"]
 }
 ```
 
