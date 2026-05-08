@@ -1045,7 +1045,7 @@ Admin users are created via the Admin Auth integration:
 execute_integration(
   project_id: 12345,
   service: "admin_auth",
-  endpoint: "create-user",
+  endpoint: "create_user",
   input: { email: "admin@example.com", password: "securepassword", name: "Admin" }
 )
 ```
