@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "2.1"
+  version: "2.2"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -895,7 +895,7 @@ the platform handles authentication, rate limiting, and error handling.
 | **Mollie** | Payments | European payments (iDEAL, Bancontact, cards) | `execute_integration(service: "mollie", endpoint: "create-payment")` |
 | **Twilio** | SMS | Text messages (confirmations, alerts) | `execute_integration(service: "twilio", endpoint: "send-sms")` |
 | **Lead Capture** | Built-in | Store form submissions as leads | Form action `{"type": "leads"}` |
-| **Admin Auth** | Built-in | Password-protected pages / member areas | SAPI visitor auth flow |
+| **Admin Auth** | Built-in | Password-protected admin areas (email/password login, Bearer token auth) | `execute_integration(service: "admin_auth", endpoint: "login")` |
 | **Site Context** | Built-in | Store design decisions across sessions | `execute_integration(service: "site_context", endpoint: "set-context")` |
 
 ### How integrations work
@@ -915,12 +915,152 @@ and the integration proxy resolves them server-side at execution time.
 | Accept payments on website | Stripe or Mollie integration |
 | SMS confirmation after booking | Twilio integration |
 | Store leads from multiple forms | Built-in Lead Capture |
-| Password-protected member area | Admin Auth (SAPI visitor auth) |
+| Password-protected admin dashboard | Admin Auth (IAPI admin session) |
+| Member area with magic link / code login | SAPI Visitor Auth |
 | Remember design choices across sessions | Site Context integration |
 
 **Always check if an integration exists before building custom solutions.**
 The built-in integrations handle authentication, error handling, rate limiting,
 and security — reimplementing these is unnecessary and error-prone.
+
+---
+
+## Admin-Protected Pages — IAPI Admin Auth
+
+When building dashboards, admin panels, or any page that requires a logged-in admin
+(not a public visitor), use the IAPI Admin Auth pattern. This is separate from
+SAPI Visitor Auth — they serve different purposes.
+
+| Feature | Admin Auth (IAPI) | Visitor Auth (SAPI) |
+|---|---|---|
+| **Use case** | Admin dashboards, CMS, internal tools | Member areas, gated content, loyalty portals |
+| **Login method** | Email + password | Magic link or verification code |
+| **Token storage** | `sessionStorage.admin_token` | Managed by sapi-client.js internally |
+| **API calls** | Direct `fetch()` to `/iapi/project/{id}/...` with `Authorization: Bearer` | `WP.sapi(id).call(...)` via CDN library |
+| **Token prefix** | `wsa_` (server-side) | Session ID (no token exposed to page) |
+
+### Admin Login
+
+```javascript
+const PROJECT_ID = 12345; // replace with actual project ID
+
+async function login(email, password) {
+  const r = await fetch(`/iapi/project/${PROJECT_ID}/admin-auth/login`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email, password})
+  });
+  const data = await r.json();
+  if (data.success && data.token) {
+    sessionStorage.setItem('admin_token', data.token);
+    localStorage.setItem('admin_token', data.token);
+    document.cookie = `admin_token=${data.token}; path=/; max-age=28800; SameSite=Lax`;
+  }
+  return data;
+}
+```
+
+Triple storage (sessionStorage + localStorage + cookie) ensures the token survives
+page navigations, tab reopens, and server-side middleware checks.
+
+### Admin-Only IAPI Calls
+
+```javascript
+async function callAdmin(service, endpoint, payload) {
+  const token = sessionStorage.getItem('admin_token');
+  if (!token) { window.location.replace('/login'); return; }
+
+  const r = await fetch(`/iapi/project/${PROJECT_ID}/${service}/${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (r.status === 401) {
+    sessionStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_token');
+    window.location.replace('/login');
+    return;
+  }
+  return r.json();
+}
+
+// Usage:
+const leads = await callAdmin('leads', 'get-leads', { page: 1, per_page: 25 });
+const msg   = await callAdmin('anthropic', 'create-message', { prompt: '...' });
+```
+
+**Important:** Use direct `fetch()` — not `WP.sapi().call()`. The SAPI client library
+is for visitor sessions. Admin calls use `Authorization: Bearer` headers on `/iapi/` routes.
+
+### Page Rendering — Auth Guard
+
+```html
+<body>
+<script>
+  // Immediate redirect — no hidden body, no async check
+  var token = sessionStorage.getItem('admin_token')
+           || localStorage.getItem('admin_token');
+  if (!token) window.location.replace('/login');
+</script>
+
+<!-- page content renders immediately for authenticated users -->
+<h1>Dashboard</h1>
+<!-- ... -->
+</body>
+```
+
+**Never do this:**
+```html
+<!-- ❌ FORBIDDEN — causes flash of invisible content, breaks on slow connections -->
+<body style="visibility:hidden">
+<script>
+  checkAuth().then(() => document.body.style.visibility = 'visible');
+</script>
+```
+
+The correct pattern is: redirect immediately if no token, render normally if token exists.
+Auth validation happens on the first API call — if the token is expired, the 401 handler
+clears storage and redirects to login.
+
+### Logout
+
+```javascript
+function logout() {
+  sessionStorage.removeItem('admin_token');
+  localStorage.removeItem('admin_token');
+  document.cookie = 'admin_token=; path=/; max-age=0';
+  window.location.replace('/login');
+}
+```
+
+### Creating Admin Users
+
+Admin users are created via the Admin Auth integration:
+
+```
+execute_integration(
+  project_id: 12345,
+  service: "admin_auth",
+  endpoint: "create-user",
+  input: { email: "admin@example.com", password: "securepassword", name: "Admin" }
+)
+```
+
+### Decision Tree — Which Auth System?
+
+```
+Does the page need login?
+├── No → No auth needed (public page)
+└── Yes
+    ├── Is the user an admin/owner managing content?
+    │   └── Use Admin Auth (IAPI) — this section
+    └── Is the user a visitor/member accessing gated content?
+        └── Use Visitor Auth (SAPI) — see "Contact Forms (SAPI)" section
+```
 
 ---
 
