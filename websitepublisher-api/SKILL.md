@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "2.3"
+   version: "2.6"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -122,7 +122,9 @@ The user has an existing website and wants it improved or migrated to WebsitePub
 4. Ask one confirmation question:
    > "I'll keep all your content but give it a fresh design with better structure. Any specific things you want to keep or change?"
 5. Build the new version — same content, improved design, better UX
-6. Share the URL and point out the specific improvements made
+6. **Migrate images** — use `upload_asset` with `source_url` to import images from the old site
+   to the CDN (see "Assets — Importing Images from External URLs" below)
+7. Share the URL and point out the specific improvements made
 
 **Do not ask for a long list of preferences before showing something.** Analyse → propose → build → refine.
 
@@ -400,13 +402,98 @@ Use colors matching the site's color scheme so placeholders look polished.
 | Nav logo | 240x48 |
 | Team card | 600x520 |
 
-### Dynamic Data (MAPI) — Prefer Entities Over Static HTML
+### Assets — Images, CSS, JS, and Files
 
-**Default to MAPI for any content that repeats, changes, or could grow.**
-Do not hardcode repeating content as static HTML — it becomes unmaintainable
-the moment the user wants to add, remove, or reorder items.
+Assets are files stored on the WebsitePublisher CDN (`cdn.websitepublisher.ai/custom/wid{id}/...`).
+Use `upload_asset` to add images, stylesheets, JavaScript, fonts, PDFs, and other static files
+to a project. Assets are served globally with caching — fast and reliable.
 
-**Always use MAPI for:**
+**Three ways to provide content:**
+
+| Parameter | Use for | Example |
+|---|---|---|
+| `source_url` | Import from any public URL — the server fetches it for you | Images from existing websites, Unsplash, DALL·E, any HTTPS URL |
+| `content` | Base64-encoded binary data | Images generated locally or received as base64 |
+| `content_text` | Plain text content (saves tokens vs base64) | CSS, JS, JSON, SVG, HTML, XML, MD files |
+
+Always provide exactly **one** of the three. Never combine them.
+
+#### Importing Images from External URLs
+
+The `source_url` parameter is the easiest way to bring images into a project. The server
+fetches the file, validates it (HTTPS only, no internal IPs), and stores it on the CDN.
+This works for **any public HTTPS URL** — not limited to any specific platform.
+
+**Common use cases:**
+- Migrating images from an existing website (WordPress, Wix, Squarespace, any CMS)
+- Importing stock photos from Unsplash, Pexels, or similar services
+- Saving AI-generated images (DALL·E, Midjourney URLs)
+- Pulling logos or assets from a client's current hosting
+
+**Example — import a single image:**
+```
+upload_asset(
+  project_id: 12345,
+  slug: "images/hero-photo.jpg",
+  source_url: "https://existing-site.com/wp-content/uploads/2025/hero.jpg"
+)
+→ CDN URL: cdn.websitepublisher.ai/custom/wid12345/images/hero-photo.jpg
+```
+
+**Example — batch import from an existing site:**
+```
+upload_asset(project_id: 12345, slug: "images/project-1.jpg", source_url: "https://old-site.nl/uploads/photo1.jpg")
+upload_asset(project_id: 12345, slug: "images/project-2.jpg", source_url: "https://old-site.nl/uploads/photo2.jpg")
+upload_asset(project_id: 12345, slug: "images/team-photo.jpg", source_url: "https://old-site.nl/uploads/team.jpg")
+```
+
+Then reference the new CDN URLs in your page HTML:
+```html
+<img src="https://cdn.websitepublisher.ai/custom/wid12345/images/project-1.jpg" alt="Project photo">
+```
+
+**Rules:**
+- `source_url` must be HTTPS — HTTP URLs are rejected
+- Internal/private IP addresses are blocked (SSRF protection)
+- Works for images (JPEG, PNG, WebP, GIF), PDF, fonts (.woff, .woff2, .ttf), and .ico files
+- Set `overwrite: true` to replace an existing asset with the same slug
+- The slug determines the CDN path — use descriptive names: `images/hero.jpg`, `images/team/jan.jpg`
+- Alt text can be set via the `alt` parameter for images
+
+**When migrating a website:** list all images on the old site first (via web fetch, sitemap,
+or CMS tools), then upload each one with `source_url`. Update page HTML to reference the
+new CDN URLs. The old site must remain accessible until all images have been imported.
+
+#### Uploading Text-Based Assets
+
+For CSS, JavaScript, JSON, SVG, and other text files, use `content_text` instead of base64
+encoding. This is more token-efficient and easier to read:
+
+```
+upload_asset(
+  project_id: 12345,
+  slug: "css/custom-styles.css",
+  content_text: "body { font-family: 'Inter', sans-serif; }"
+)
+```
+
+#### Managing Existing Assets
+
+| Action | Tool |
+|---|---|
+| List all assets | `list_assets(project_id: 12345)` |
+| Read asset content | `get_asset(project_id: 12345, slug: "js/app.js")` |
+| Edit text asset in place | `patch_asset(project_id: 12345, slug: "js/app.js", patches: [...])` |
+| Replace asset | `upload_asset(project_id: 12345, slug: "images/old.jpg", source_url: "...", overwrite: true)` |
+| Delete asset | `delete_asset(project_id: 12345, slug: "images/unused.jpg")` |
+
+### Dynamic Data (MAPI) — When Entities Make Sense
+
+**Use MAPI entities when content is managed independently of page design** — the
+owner (or a different AI session) should be able to add, remove, or reorder items
+without touching page HTML.
+
+**Use MAPI + SSR for:**
 
 | Content type | Entity name | Example fields |
 |---|---|---|
@@ -420,10 +507,19 @@ the moment the user wants to add, remove, or reorder items.
 | Events | `events` | title, date, location, description, registration_url |
 | Products (showcase) | `products` | name, description, price, image_url, category |
 
-**Use static HTML only for:**
-- One-off content that will never repeat (hero text, about page narrative)
-- Page structure and layout (sections, containers)
-- Content that is truly unique to a single page
+**Use static HTML when:**
+- Content is small and fixed (≤5 items that rarely change — e.g. 3 services on an about page)
+- The page is a one-off (hero text, about narrative, single landing page)
+- The owner will only update content through an AI session anyway
+- It's page structure and layout (sections, containers)
+
+**Don't over-engineer.** A restaurant with 8 menu items that change twice a year
+does not need a MAPI entity + SSR template + admin panel. Static HTML with clear
+structure is fine — the AI can update it in 30 seconds when the menu changes.
+
+**The trigger for MAPI:** when you hear "I want to add/remove items myself" or when
+items will grow beyond 10, or when multiple pages show the same data differently
+(e.g. a shop overview AND a homepage featured section both pulling from products).
 
 **How to build with MAPI:**
 
@@ -577,6 +673,49 @@ For JSON array fields within a record:
 {{/each}}
 ```
 
+#### Advanced Template Features
+
+**Parent context in loops** — access fields from the outer record inside `#each`:
+```html
+{{#each images}}
+  <img src="{{this}}" alt="{{../name}} photo {{@number}}">
+{{/each}}
+```
+
+**Scope helper** — `#with` narrows the context to a nested object:
+```html
+{{#with address}}
+  <p>{{street}}, {{city}} {{zip}}</p>
+{{/with}}
+```
+
+**Repeat helper** — `#times` renders a block N times (useful for star ratings):
+```html
+{{#times 5}}<span class="star">★</span>{{/times}}
+```
+
+**Join helper** — concatenate array items with a separator:
+```html
+<p>Tags: {{#join tags ", "}}</p>
+```
+
+**Template comments** — invisible in rendered output:
+```html
+{{!-- This comment won't appear in the HTML --}}
+```
+
+**Literal escaping** — prevent template processing:
+```html
+\{{this will appear literally as curly braces\}}
+```
+
+**Empty attribute shorthand** — alternative to the `wps-mapi-empty` block:
+```html
+<!--#wps-mapi entity="products" empty="No products found." -->
+<div>{{name}}</div>
+<!--#/wps-mapi -->
+```
+
 #### Available Filters
 
 | Filter | Example | Output |
@@ -594,7 +733,11 @@ For JSON array fields within a record:
 | `date:relative` | `{{created_at \| date:relative}}` | "2 dagen geleden" |
 | `default:VALUE` | `{{bio \| default:No bio}}` | Fallback if empty |
 | `striptags` | `{{html \| striptags}}` | Strip HTML tags |
+| `nl2br` | `{{text \| nl2br}}` | Newlines to `<br>` tags |
 | `slug` | `{{title \| slug}}` | URL-safe slug |
+| `urlencode` | `{{query \| urlencode}}` | URL-encode value |
+| `md5` | `{{email \| md5}}` | MD5 hash (useful for Gravatar URLs) |
+| `json_pretty` | `{{data \| json_pretty}}` | Pretty-print JSON (debugging) |
 | `count` / `length` | `{{items \| count}}` | Array/string length |
 
 Filters can be chained: `{{price | multiply:0.01 | number:2}}`
@@ -619,6 +762,31 @@ Render one specific record by ID or field match:
 <p>{{description}}</p>
 <!--#/wps-mapi -->
 ```
+
+**URL-based slug matching** (planned — requires `_template.html` wildcard routing):
+```html
+<!--#wps-mapi entity="products" record=":slug" match="slug" -->
+<h1>{{name}}</h1>
+<p>{{{description}}}</p>
+<!--#/wps-mapi -->
+```
+When a visitor opens `/products/wireless-headphones`, the Optimizer will serve
+`/products/_template.html` and resolve `:slug` to `wireless-headphones` for the
+MAPI lookup. Not yet available — use hardcoded `record="42"` or client-side JS
+for detail pages until this is implemented.
+
+#### SSR Wrapper Attributes
+
+The SSR injector adds `data-mapi-ssr` attributes to rendered blocks:
+
+```html
+<div data-mapi-ssr="products" data-mapi-count="12">
+  <!-- rendered product cards -->
+</div>
+```
+
+JavaScript can use these to enhance SSR-rendered content (e.g. add client-side
+search/filter on top of the server-rendered list). SSR and JS coexist naturally.
 
 #### Complete Examples
 
@@ -665,30 +833,29 @@ Render one specific record by ID or field match:
 <!--#/wps-mapi -->
 ```
 
-### When to use SSR vs JavaScript
+### When to use SSR vs JavaScript vs Static HTML
 
-| Scenario | Use |
-|---|---|
-| Product list, blog overview, team page, menu | **SSR** — content must be indexable |
-| FAQ section, testimonials, portfolio grid | **SSR** — static content, SEO matters |
-| Client-side search/filter | **JS** — user interaction required |
-| Live price updates, stock status | **JS** — real-time data needed |
-| Shopping cart, wishlist | **JS** — user-specific state |
-| Product list WITH search bar | **Both** — SSR for initial load + SEO, JS for search |
+| Scenario | Use | Why |
+|---|---|---|
+| Product catalog (10+ items, public) | **SSR** | SEO, owner adds products via admin |
+| Blog, portfolio grid, FAQ (growing) | **SSR** | SEO, content changes independently |
+| 3 services on about page | **Static HTML** | Too few items, rarely changes |
+| 4 team members, small company | **Static HTML** | AI updates faster than building MAPI+SSR |
+| Client-side search/filter | **JS** | User interaction required |
+| Live price updates, stock status | **JS** | Real-time data needed |
+| Shopping cart, wishlist | **JS** | User-specific state |
+| Product list WITH search bar | **SSR + JS** | SSR for initial load + SEO, JS for interaction |
+| Admin dashboard tables | **JS only** | No SEO needed, always behind login |
 
-**The rule:** Default to SSR. Only add client-side JavaScript when the user needs
-to interact with the data (search, filter, sort, add to cart). SSR and JS can coexist —
-use SSR for the initial server-rendered content and JS for the interactive enhancement.
+**Decision flow:**
+1. Will Google need to index this content? → Consider SSR
+2. Will the content grow beyond 10 items? → Consider MAPI entity
+3. Does the owner need to update without AI? → MAPI + admin panel
+4. Is it ≤5 fixed items on one page? → **Static HTML is fine**
+5. Does the user interact with it? → Add JS (on top of SSR if SEO matters)
 
-**Why this matters:**
-- User wants to add a team member → create one record, no HTML changes needed
-- User wants to reorder services → update sort_order values, no page edit needed
-- User wants to change a price → update one field, reflected everywhere
-- Google indexes all products instantly → no second-wave JavaScript rendering needed
-- Different AI session continues the work → entities are the source of truth, not HTML
-
-**The rule:** If you find yourself writing the same HTML structure 3+ times with
-different content — stop, create a MAPI entity, and render with SSR.
+SSR and JS can coexist — use SSR for the initial server-rendered content and JS
+for interactive enhancement on top.
 
 ---
 
@@ -723,6 +890,11 @@ configure_form(
 
 **Always use the CDN library.** Do not write inline session management code.
 The library handles sessions, CSRF tokens, stale session recovery, and all headers automatically.
+
+> ⚠️ **`WP.sapi()` is for visitor-facing forms only** — contact forms, file uploads,
+> member-area magic links. **Do not use it for admin authentication.** Admin login and
+> admin-only IAPI calls use direct `fetch()` to `/iapi/project/{id}/admin-auth/...` with
+> `Authorization: Bearer` headers — see the **Admin-Protected Pages** section below.
 
 ```html
 <script src="https://cdn.websitepublisher.ai/js/sapi-client.js"></script>
@@ -777,6 +949,10 @@ The library handles sessions, CSRF tokens, stale session recovery, and all heade
 
 Forms can accept image uploads from visitors via the SAPI upload endpoint.
 Uploads are stored as project assets on the CDN -- no bearer token needed.
+
+> **Building an admin panel with image upload?** See "Image Upload in Admin Panels"
+> under the Admin-Protected Pages section — it shows how to combine admin auth
+> with SAPI upload on the same page.
 
 **Flow:** upload file(s) first -> collect CDN URLs -> include in form submit fields.
 
@@ -904,7 +1080,11 @@ the platform handles authentication, rate limiting, and error handling.
 | **Twilio** | SMS | Text messages (confirmations, alerts) | `execute_integration(service: "twilio", endpoint: "send-sms")` |
 | **Lead Capture** | Built-in | Store form submissions as leads | Form action `{"type": "leads"}` |
 | **Admin Auth** | Built-in | Password-protected admin areas (email/password login, Bearer token auth) | `execute_integration(service: "admin_auth", endpoint: "login")` |
+| **Auth Keys** | Built-in | Request project API keys stored in vault (human-approved) | `execute_integration(service: "auth_keys", endpoint: "request-key")` |
+| **Asset Proxy** | Built-in | Upload/delete assets from browser admin panels (no WPA key needed) | `execute_integration(service: "asset-proxy", endpoint: "upload")` |
 | **Site Context** | Built-in | Store design decisions across sessions | `execute_integration(service: "site_context", endpoint: "set-context")` |
+| **Product Catalog** | Built-in | Products, variants, categories, bulk import | `execute_integration(service: "product-catalog", endpoint: "list-products")` |
+| **Request Tracer** | Built-in | Debug API + page requests in real-time | `execute_integration(service: "tracer", endpoint: "start")` |
 
 ### How integrations work
 
@@ -914,6 +1094,27 @@ the platform handles authentication, rate limiting, and error handling.
 
 API keys are **never exposed** to the AI or the browser. The Vault encrypts them at rest
 and the integration proxy resolves them server-side at execution time.
+
+### Vault References — `{{vault:key_name}}`
+
+The IAPI proxy resolves `{{vault:key_name}}` server-side before making API calls.
+This is the core security mechanism that keeps secrets out of AI conversations and browser code.
+
+**Where vault references work (server-side only):**
+
+| Context | Works? | Example |
+|---|---|---|
+| `execute_integration` input | ✅ | `"api_key": "{{vault:stripe_key}}"` |
+| Scheduled tasks (AAPI) | ✅ | Vault refs in task payload resolved at execution |
+| IAPI proxy calls | ✅ | Bearer token from vault |
+| Browser JavaScript | ❌ | Browser cannot access vault — use admin auth (`wsa_`) instead |
+| Page HTML source | ❌ | Would expose secrets to anyone viewing source |
+| MCP tool responses | ❌ | VaultSanitizer strips any leaked vault values |
+
+**Critical rule:** Never put vault keys in browser-facing code. If a browser page needs
+to call an authenticated API, use the **admin auth pattern** (`wsa_` token) for data
+operations and **SAPI upload** for file uploads. The vault exists for server-side
+integrations only.
 
 ### When to use integrations
 
@@ -926,14 +1127,90 @@ and the integration proxy resolves them server-side at execution time.
 | Password-protected admin dashboard | Admin Auth (IAPI admin session) |
 | Member area with magic link / code login | SAPI Visitor Auth |
 | Remember design choices across sessions | Site Context integration |
+| Import 50-500 products at once | `bulk-upsert-products` (Product Catalog) |
+| Upload images from admin panel (browser) | **Asset Proxy** (PAPI assets) or **SAPI upload** (form uploads) |
+| Request a project API key securely | Auth Keys (human-approved, vault-stored) |
+| Debug failing requests or slow pages | Request Tracer |
 
 **Always check if an integration exists before building custom solutions.**
 The built-in integrations handle authentication, error handling, rate limiting,
 and security — reimplementing these is unnecessary and error-prone.
 
+### Bulk Product Import
+
+For large catalogs, use `bulk-upsert-products` instead of looping `create-product`:
+
+```
+execute_integration(
+  service: "product-catalog",
+  endpoint: "bulk-upsert-products",
+  input: {
+    "items": [
+      {"sku": "TSH-001", "name": "Classic Tee", "price_cents": 2999, "status": "active"},
+      {"sku": "TSH-002", "name": "V-Neck Tee", "price_cents": 3499, "status": "active"},
+      {"sku": "TSH-001", "price_cents": 2799}
+    ]
+  }
+)
+```
+
+Each item is matched by SKU: existing → update, new → create (needs `name` + `price_cents`).
+Max 500 items per call. Response includes per-item status and `summary.by_error_type`.
+
+**Always check `result.failed` and `result.summary.by_error_type`** — `success: true`
+means the call itself worked, not that every item succeeded.
+
+### Debugging with Request Tracer
+
+When something isn't working — a page returns wrong data, an integration fails,
+or performance is slow — use the Request Tracer to see exactly what happened:
+
+1. **Start a trace session:**
+   ```
+   execute_integration(
+     service: "tracer",
+     endpoint: "start",
+     input: { "ttl": 120, "include_optimizer": true }
+   )
+   → returns hash (e.g., "tr_abc12345")
+   ```
+
+2. **Perform the operation that's failing** — create a page, submit a form, call an integration
+
+3. **Read the trace:**
+   ```
+   execute_integration(
+     service: "tracer",
+     endpoint: "logs",
+     input: { "hash": "tr_abc12345" }
+   )
+   ```
+
+The trace shows every API request and page render with HTTP method, path, status
+code, duration, SQL query summary, and which server handled the request.
+
+Integration failures include typed error data (`error_type`, `error_code`,
+`error_field`, `recovery`) so you can see exactly what went wrong without guessing.
+
+**When to use the tracer:**
+- Page renders wrong content → trace optimizer request, check SQL queries
+- Integration call fails → trace API request, check `error_type` and `recovery`
+- Request is slow → check `duration_ms` and `db.total_ms` breakdown
+- "It works sometimes" → `server` field shows which node handled each request
+
+**Options:**
+- `include_optimizer: true` — also trace public page renders (default: off)
+- `include_sql: false` — skip SQL summary (default: on)
+- `ttl: 10-300` — session duration in seconds (default: 60)
+
 ---
 
 ## Admin-Protected Pages — IAPI Admin Auth
+
+> **⚠️ Need to upload images from an admin panel?** Do NOT use `upload_asset`,
+> vault keys, or MAPI asset routes from the browser. Use **Asset Proxy**
+> (`/iapi/project/{id}/asset-proxy/upload` with your `wsa_` admin token) — it's
+> the simplest option. See "Image Upload in Admin Panels" below.
 
 When building dashboards, admin panels, or any page that requires a logged-in admin
 (not a public visitor), use the IAPI Admin Auth pattern. This is separate from
@@ -1057,9 +1334,12 @@ execute_integration(
   project_id: 12345,
   service: "admin_auth",
   endpoint: "create_user",
-  input: { email: "admin@example.com", password: "securepassword", name: "Admin" }
+  input: { email: "admin@example.com", password: "securepassword" }
 )
 ```
+
+The `create_user` endpoint accepts only `email` and `password` — no name field.
+The email serves as the unique identifier and login credential.
 
 ### Decision Tree — Which Auth System?
 
@@ -1072,6 +1352,276 @@ Does the page need login?
     └── Is the user a visitor/member accessing gated content?
         └── Use Visitor Auth (SAPI) — see "Contact Forms (SAPI)" section
 ```
+
+### Common Pitfalls — Why Admin Auth Has Its Own Pattern
+
+Multiple AI builds have walked into the same trap: trying to call admin endpoints
+via the SAPI execute route (`WP.sapi().call('/execute/admin_auth/login', ...)`).
+That path requires a visitor session bootstrap and CSRF tokens — machinery the SAPI
+library wraps for visitor forms but that does not align with how admin auth issues
+and validates `wsa_` Bearer tokens.
+
+**The canonical admin auth path is always:**
+
+| Step | Call | Auth header |
+|------|------|------------|
+| 1. Login | `POST /iapi/project/{id}/admin-auth/login` | None — body has email + password |
+| 2. Store token | sessionStorage + localStorage + cookie | — |
+| 3. Authenticated calls | `POST /iapi/project/{id}/{service}/{endpoint}` | `Authorization: Bearer wsa_...` |
+| 4. Verify on page load | `POST /iapi/project/{id}/admin-auth/verify` | None — body has token |
+| 5. Logout | `POST /iapi/project/{id}/admin-auth/logout` | None — body has token |
+
+**Anti-patterns — never do these for admin auth:**
+
+- ❌ `WP.sapi().call('/execute/admin_auth/login', ...)` — that route is for visitor SAPI flows
+- ❌ Manual `GET /sapi/session` + `X-CSRF-Token` headers — admin auth doesn't use the SAPI session layer
+- ❌ Reading the token from `r.data.token` after a SAPI execute call — wrong envelope shape
+- ❌ `<body style="visibility:hidden">` while running an async auth check — see Page Rendering above
+- ❌ URL with underscore for login/verify/logout: `/iapi/project/{id}/admin_auth/login` — those specific routes are `admin-auth` (hyphen)
+
+The IAPI route is fully self-contained: no session, no CSRF, just `Authorization: Bearer`
+on the request. If you find yourself adding session bootstrap or CSRF token logic to an
+admin page, stop — you've taken the wrong turn.
+
+### Image Upload in Admin Panels
+
+Admin panels often need image upload — for portfolio management, product photos, team
+pictures, or any content the admin manages visually.
+
+There are two approaches. **Asset Proxy** stores files in the PAPI asset system (visible
+in `list_assets`, manageable). **SAPI upload** stores files in the form uploads bucket.
+Both return CDN URLs. Choose based on whether you need the files in the project's asset system.
+
+#### Option A — Asset Proxy (recommended for admin panels)
+
+Uses the admin's existing `wsa_` token. No extra setup needed — no SAPI form, no CDN script.
+Files go into the PAPI asset system.
+
+```javascript
+const PROJECT_ID = 12345;
+
+function getAdminToken() {
+  return sessionStorage.getItem('admin_token');
+}
+
+// Convert file to base64
+function fileToBase64(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function() { resolve(reader.result.split(',')[1]); };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Upload via asset-proxy (uses admin token, no WPA key needed)
+async function uploadImage(file, slug) {
+  var base64 = await fileToBase64(file);
+
+  var res = await fetch('/iapi/project/' + PROJECT_ID + '/asset-proxy/upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + getAdminToken()
+    },
+    body: JSON.stringify({
+      slug: slug,          // e.g. "images/product-42.jpg"
+      base64: base64,
+      overwrite: true
+    })
+  });
+
+  if (res.status === 401) { window.location.replace('/login'); return; }
+  var data = await res.json();
+  if (data.success) {
+    return data.asset_url;  // CDN URL: cdn.websitepublisher.ai/custom/wid.../images/...
+  }
+  throw new Error(data.message || 'Upload failed');
+}
+
+// Combined: upload image, then save product
+document.getElementById('product-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var file = document.getElementById('photo').files[0];
+  var name = document.getElementById('name').value;
+  var slug = 'images/product-' + Date.now() + '.' + file.name.split('.').pop();
+
+  var imageUrl = file ? await uploadImage(file, slug) : null;
+  await saveProduct(name, imageUrl);  // IAPI call with wsa_ token (see Admin-Only IAPI Calls)
+});
+```
+
+#### Option B — SAPI Upload (alternative, requires form setup)
+
+```javascript
+const PROJECT_ID = 12345;
+var sapi = WP.sapi(PROJECT_ID);  // SAPI session for uploads
+
+// Admin is logged in — wsa_ token in sessionStorage (see Admin Login above)
+function getAdminToken() {
+  return sessionStorage.getItem('admin_token');
+}
+
+// Image upload — uses SAPI (no admin token needed)
+async function uploadImage(file) {
+  var session = await sapi.getSession();
+  var form = new FormData();
+  form.append('file', file);
+  form.append('_csrf', session.csrf_token);
+  form.append('form_name', 'admin_upload');
+
+  var res = await fetch(
+    'https://api.websitepublisher.ai/sapi/project/' + PROJECT_ID + '/form/upload',
+    {
+      method: 'POST',
+      headers: { 'X-Session-Id': session.session_id },
+      body: form
+    }
+  );
+
+  var data = await res.json();
+  if (data.success) {
+    sapi.clearSession();  // CSRF is single-use
+    return data.data.asset_url;  // CDN URL: cdn.websitepublisher.ai/custom/wid.../images/...
+  }
+  throw new Error(data.error?.message || 'Upload failed');
+}
+
+// Save data with image URL — uses admin auth (wsa_ token)
+async function saveProduct(name, imageUrl) {
+  var res = await fetch('/iapi/project/' + PROJECT_ID + '/product-catalog/create-product', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + getAdminToken()
+    },
+    body: JSON.stringify({ name: name, image_url: imageUrl })
+  });
+  if (res.status === 401) { window.location.replace('/login'); return; }
+  return res.json();
+}
+
+// Combined flow: upload image, then save record
+document.getElementById('product-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var file = document.getElementById('photo').files[0];
+  var name = document.getElementById('name').value;
+
+  var imageUrl = file ? await uploadImage(file) : null;
+  await saveProduct(name, imageUrl);
+});
+```
+
+#### Setup Requirements
+
+For image upload to work in an admin panel, you need:
+
+1. **A SAPI form configured** for the upload (even a minimal one):
+   ```
+   configure_form(
+     project_id: 12345,
+     form_name: "admin_upload",
+     required_fields: [],
+     action: { type: "none" },
+     max_submits_per_session: 20
+   )
+   ```
+
+2. **The CDN script** on the page:
+   ```html
+   <script src="https://cdn.websitepublisher.ai/js/sapi-client.js"></script>
+   ```
+
+3. **Admin auth** already working (see Admin Login above)
+
+#### How the Auth Systems Coexist
+
+| Operation | Auth system | Token | Endpoint |
+|---|---|---|---|
+| Admin login | IAPI Admin Auth | `wsa_` | `/iapi/project/{id}/admin-auth/login` |
+| Read/write data | IAPI | `wsa_` Bearer | `/iapi/project/{id}/{service}/{endpoint}` |
+| Upload image (Option A) | IAPI Asset Proxy | `wsa_` Bearer | `/iapi/project/{id}/asset-proxy/upload` |
+| Upload image (Option B) | SAPI | Session + CSRF | `/sapi/project/{id}/form/upload` |
+| Result | — | — | CDN URL in `asset_url` response field |
+
+With **Option A** (asset-proxy), everything uses the same `wsa_` admin token — simpler code,
+no second auth system needed.
+
+With **Option B** (SAPI upload), the SAPI session lives separately in
+`sessionStorage.wp_{projectId}_sid` and never conflicts with the admin token.
+
+#### Common Mistake
+
+Do NOT try to upload images via `upload_asset` or MAPI asset routes from the browser.
+Those are MCP/API tools, not browser endpoints.
+
+**These approaches will NOT work for browser-based uploads:**
+
+- `POST /mapi/project/{id}/assets` with `wsa_` token → 401 (wsa_ not accepted for asset writes)
+- `/iapi/project/{id}/upload-asset` → 404 (does not exist)
+- Vault keys (`{{vault:wpa_...}}`) in browser JavaScript → vault refs are server-side only
+- Custom API proxy with vault key → proxy passes the literal string, not the resolved value
+
+**Use Asset Proxy (Option A) or SAPI upload (Option B)** — both handle auth correctly
+and return CDN URLs. Asset Proxy is simpler because it uses the same `wsa_` token
+you already have for data operations.
+
+### Vault-Based API Keys (AI-Requested)
+
+When building admin panels or integrations that need server-side API access,
+the AI can request a project key **without ever seeing the raw token**.
+The project owner approves via email — the key goes directly into the vault.
+
+#### The Flow
+
+1. **AI requests a key:**
+   ```
+   execute_integration(
+     project_id: 12345,
+     service: "auth_keys",
+     endpoint: "request-key",
+     input: {
+       vault_key_name: "wpa_dashboard",
+       purpose: "Leads dashboard — read and update leads"
+     }
+   )
+   ```
+   Response: `{ status: "pending_approval", request_id: "req_a1b2c3..." }`
+
+2. **Project owner receives email** → clicks confirmation link → key is created
+
+3. **AI checks status** (optional, same session):
+   ```
+   execute_integration(
+     project_id: 12345,
+     service: "auth_keys",
+     endpoint: "check-status",
+     input: { request_id: "req_a1b2c3..." }
+   )
+   ```
+   Response: `{ status: "approved" }` (or `"pending"` / `"expired"`)
+
+4. **AI uses the vault reference** in IAPI proxy calls, scheduled tasks, or page templates:
+   `{{vault:wpa_dashboard}}`
+
+The AI never sees the actual token. The key exists only in the vault and is resolved
+server-side by the IAPI proxy.
+
+#### Key Rules
+
+- `vault_key_name` **must** start with `wpa_` (prevents overwriting other vault secrets)
+- `purpose` is required — it's shown to the owner in the confirmation email
+- Max 2 pending requests per project at a time
+- Unconfirmed requests expire after 1 hour
+- Each confirmation link works only once
+
+#### When to Use This
+
+Use `auth_keys` when a page or scheduled task needs to make authenticated API calls
+and no WPA key exists in the vault yet. Common scenarios: admin dashboards,
+automated data sync tasks, headless API integrations.
+
+Do NOT use this for visitor-facing pages — those use SAPI sessions (no Bearer token needed).
 
 ---
 
@@ -1090,10 +1640,75 @@ how the platform works from scratch.
 best practices, regardless of which AI platform the user is on.
 
 ### Design Context (site_context integration)
-Design decisions (colors, fonts, style direction) are stored per project via the
-`site_context` integration. When a new AI session starts, call `get_project_status`
-to retrieve the stored design context — this ensures visual consistency even when
-a different AI or a different conversation continues the work.
+
+Design decisions should be **saved immediately** when made — not at the end of a
+session when they might be forgotten. Use `site_context` as a living design brief
+that any AI session can pick up:
+
+**Save after every design decision:**
+```
+execute_integration(
+  service: "site_context",
+  endpoint: "set-context",
+  input: {
+    "brand_name": "Kintsugi Coffee",
+    "primary_color": "#2D5016",
+    "secondary_color": "#F5F0E8",
+    "font_heading": "Playfair Display",
+    "font_body": "Inter",
+    "style_direction": "Warm, artisanal, Japanese-inspired minimalism",
+    "tone_of_voice": "Friendly, knowledgeable, never pretentious",
+    "pages_built": ["homepage", "shop", "about"],
+    "pages_remaining": ["contact", "faq", "product-detail"],
+    "current_status": "Storefront 60% complete, admin not started"
+  }
+)
+```
+
+**Retrieve at the start of every session:**
+```
+execute_integration(
+  service: "site_context",
+  endpoint: "get-context",
+  input: {}
+)
+```
+
+This is the single most important continuity tool. Without it, a new AI session
+has to ask the user to re-explain every design choice.
+
+### Task Tracking (TAPI)
+
+For multi-session website builds, track progress with tasks so no work gets lost
+or repeated. Each task has a slug, status, and history — visible across sessions.
+
+**Create tasks for each build phase:**
+```
+create_task(slug: "homepage-build", title: "Build homepage with hero + features")
+create_task(slug: "shop-pages", title: "Shop overview + product detail pages")
+create_task(slug: "contact-form", title: "Contact form with Resend email")
+create_task(slug: "admin-dashboard", title: "Admin panel with auth + CRUD")
+```
+
+**Update progress as you work:**
+```
+add_task_history(
+  slug: "homepage-build",
+  type: "progress",
+  status: "done",
+  completion_pct: 100,
+  summary: "Homepage live: hero section, 3 feature cards, testimonials, CTA"
+)
+```
+
+**Start of next session — check what's done and what's next:**
+```
+list_tasks(status: "in_progress")   # What's being worked on
+list_tasks(status: "open")          # What hasn't started yet
+```
+
+This gives every AI session — regardless of platform — a shared understanding of
+where the project stands. The user doesn't have to re-explain what was already built.
 
 ### Scheduled Tasks (AAPI)
 Websites sometimes need automated actions: publish a page at a specific time,
@@ -1148,6 +1763,9 @@ POST   /iapi/project/{id}/resend/send-email           Send email via Resend
 POST   /iapi/project/{id}/mollie/create-payment       Create Mollie payment
 POST   /iapi/project/{id}/site_context/set-context    Save design context
 POST   /iapi/project/{id}/site_context/get-context    Get design context
+POST   /iapi/project/{id}/product-catalog/bulk-upsert-products  Bulk import (up to 500)
+POST   /iapi/project/{id}/tracer/start                Start debug trace session
+POST   /iapi/project/{id}/tracer/logs                 Read trace entries
 ```
 
 ### Key SAPI Endpoints (visitor-facing, no bearer token)
