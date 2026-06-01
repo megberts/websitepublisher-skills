@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "2.6"
+   version: "2.7"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -32,8 +32,9 @@ Every AI can generate HTML. But generating code is not the same as having a webs
 | Want a contact form? Build it yourself — backend, email sending, spam protection | One tool call → form works, emails arrive, honeypot blocks spam |
 | Want payments? Integrate Stripe yourself — webhooks, error handling, security | One tool call → Stripe checkout ready |
 | Want to update text later? Ask AI again, re-generate, re-upload | Open the **Visual Editor** in your browser — edit directly, no AI needed |
-| New AI session? Start from scratch — the AI forgot everything | **Skills + design context** keep consistency across sessions and platforms |
-| Dynamic data (menu, team, products)? Build a database and API | One entity definition → public API endpoint, ready to fetch |
+| New AI session — or a different AI entirely? The model forgot everything | **The platform remembers, not the model.** Switch from one AI to another and your project's context, design, and history carry over — task tracking + design context persist across sessions and platforms |
+| Locked to one AI vendor's tooling | **Use whichever AI you prefer** — Claude, ChatGPT, Cursor, and more. Your site and data don't change. Model-agnostic by design |
+| Dynamic data (menu, team, products)? Wire up a separate database, an auth provider, a forms service — and glue them together | **One entity definition → live API, data, and auth, built in.** No extra accounts, no integration plumbing |
 
 **WebsitePublisher is not a website builder.** It is the infrastructure layer that turns
 AI-generated content into real, working websites — with data, forms, integrations,
@@ -1061,7 +1062,17 @@ Before handing over to the user, verify:
 
 ---
 
-## Built-in Integrations — Don't Reinvent the Wheel
+## Built-in Integrations — Composable Building Blocks
+
+WebsitePublisher's integrations are not a feature list — they are composable building
+blocks. Every integration speaks the same interface
+(`execute_integration(service, endpoint, input)`), authenticates the same way (the Vault),
+and is callable from any AI on any platform via MCP. This means the AI doesn't *build* a
+payment flow, an email pipeline, or a lead system — it *assembles* them from pieces that
+are already wired, secured, and maintained. Generating code gives you a draft; snapping
+integrations together gives you a working system.
+
+### Don't reinvent the wheel
 
 WebsitePublisher includes pre-built integrations for common website needs.
 You do not need to build email sending, payment processing, or SMS from scratch.
