@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "2.7"
+   version: "2.8"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -48,6 +48,62 @@ and visual editing built in.
 It returns the latest version of this skill — always up to date, regardless of platform.
 
 If `get_skill` is not available, continue with this document.
+
+---
+
+## You Are the Builder — Solve It Yourself
+
+You build and operate the site. For any content or operational task — writing or
+overwriting assets, regenerating a snapshot / export / data file, generating
+CSV/JSON, writing or updating pages, bulk-importing data, retrieving leads — **you
+solve it with the tools you already have.** Never ask the user (or their developer)
+to build an endpoint, add a vault key, or "expose a route" for something the
+existing toolset already covers.
+
+**Before you ever conclude a capability is missing:**
+
+1. Check your MCP tools — `upload_asset`, `patch_asset`, `update_page`, `patch_page`,
+   `create_page`, `execute_integration`, `list_assets`, `get_asset`.
+2. **List what's actually wired on the project — don't rely on memory or even this
+   document.** `list_integrations(project_id)` returns every integration (configured
+   *and* available) with all its endpoints straight from the manifest;
+   `get_integration_schema(project_id, service)` returns the exact input fields for an
+   endpoint; `list_assets(project_id)` shows every existing file. These are the ground
+   truth — query them before assuming a capability, endpoint, or asset is missing. Then
+   cross-check the **Asset Proxy**, **Admin-Only IAPI Calls**, and **API Quick Reference**
+   sections of this skill.
+3. **Never invent or guess endpoints.** The IAPI route is always
+   `/project/{id}/{service}/{endpoint}` — match the host and shape the project already
+   uses (check an existing working call or the project's admin/WSA bridge; some setups
+   expose IAPI at `api.websitepublisher.ai/iapi/...`, others at an `iapi.` subdomain).
+   `/mapi` is entities/data only and has no asset-write route. A made-up top-level
+   route like `/project/{id}/upload-asset` returns `404`; that is your mistake, not a
+   platform gap. Asset writes go through the `asset_proxy/upload` endpoint.
+
+**Canonical asset write (so this never recurs):**
+
+| Where | How |
+|---|---|
+| Server-side (you, via MCP) | `upload_asset(slug, content_text \| content, overwrite: true)` to create/replace; `patch_asset(slug, patches)` for in-place text edits |
+| Browser admin panel | `POST /iapi/project/{id}/asset-proxy/upload` with `Authorization: Bearer wsa_…`, body `{ slug, base64, overwrite: true }` |
+
+Asset Proxy is **not images-only** — it takes any `slug` and stores any bytes in the
+PAPI asset system. Writing a JSON/CSV/text data file (e.g. a products snapshot) is the
+same call: base64-encode the text and send it with its `.json`/`.csv` slug. It needs
+**no new endpoint and no vault key.**
+
+**Solvable task vs genuine platform gap:**
+
+- **Solvable — DO it. Never escalate. Never request keys or endpoints for:** asset
+  write/overwrite · snapshot / export / data-file generation · page write or content
+  update · bulk import · lead retrieval · admin auth.
+- **Genuine platform gap — report it, but do NOT hand off the build.** Only when *no*
+  MCP tool **and** *no* documented IAPI/PAPI endpoint exists for the operation and it
+  needs a platform-side code change. Then write **one short paragraph**: the operation,
+  the tools/endpoints you tried, and why each was insufficient. Do not ask the site's
+  developer to hand-build a redundant route, and do not request `AAPI_*` or vault keys
+  to perform content, asset, or export work — those authenticate via `wsa_` or your MCP
+  session and never need vault AI keys.
 
 ---
 
@@ -402,6 +458,38 @@ Use colors matching the site's color scheme so placeholders look polished.
 | Portrait | 600x800 |
 | Nav logo | 240x48 |
 | Team card | 600x520 |
+
+#### ⚠️ Image performance — mandatory rules
+
+Every `<img>` tag MUST include `width` and `height` attributes matching the rendered dimensions. This prevents Cumulative Layout Shift (CLS) — without them, the browser cannot reserve space before the image loads, causing visible page jumps.
+
+Images below the fold MUST include `loading="lazy"`. This defers loading until the image is near the viewport, reducing initial page weight and improving mobile performance.
+
+**Rules:**
+
+| Rule | Why |
+|---|---|
+| Always set `width` and `height` on `<img>` | Prevents CLS — browser reserves space before load |
+| Add `loading="lazy"` to below-fold images | Defers load — critical for pages with many images |
+| Hero images and above-fold logos: keep eager | These are visible immediately — lazy would delay them |
+| Match dimensions to CSS rendered size | Use the pixel values from CSS (e.g. if CSS says `width: 28px`, set `width="28" height="28"`) |
+
+**Correct examples:**
+```html
+<!-- Above fold: dimensions only, no lazy -->
+<img src="https://cdn.websitepublisher.ai/custom/wid12345/logo.svg" alt="Logo" width="80" height="80">
+
+<!-- Below fold: dimensions + lazy -->
+<img src="https://cdn.websitepublisher.ai/custom/wid12345/logo/ChatGPT.png" alt="ChatGPT" width="28" height="28" loading="lazy">
+```
+
+**Never do this:**
+```html
+<!-- ❌ No dimensions, no lazy — causes CLS and eager-loads everything -->
+<img src="https://cdn.websitepublisher.ai/custom/wid12345/images/photo.jpg" alt="Photo">
+```
+
+**Impact:** A page with 11 images missing `loading="lazy"` fires 11 simultaneous CDN requests on page load. On mobile (slower network, in-app mail browsers), this causes blank pages and multi-second load delays. Adding lazy loading reduced this to 1-2 eager requests with the rest deferred.
 
 ### Assets — Images, CSS, JS, and Files
 
@@ -1079,6 +1167,25 @@ You do not need to build email sending, payment processing, or SMS from scratch.
 Each integration is a single tool call — credentials are stored securely in the Vault,
 the platform handles authentication, rate limiting, and error handling.
 
+### Discover what's available — list it, don't guess
+
+You never have to guess which integrations or endpoints exist. Two tools read the
+**live manifest** for the current project — they are the source of truth, more current
+than this document:
+
+- `list_integrations(project_id)` — every integration, split into **configured** (vault
+  secrets present, ready to call now) and **available** (needs setup), each with its full
+  endpoint list and descriptions. A typical project already has dozens wired
+  (asset upload, exports, payments, email, shipping, imports, analytics, and more).
+- `get_integration_schema(project_id, service)` — the exact input fields (name, required,
+  type, limits) for every endpoint of one integration. Call this before
+  `execute_integration` so you send the correct body the first time.
+
+If a task seems to need a capability you have no tool for, run `list_integrations` **first**.
+The endpoint almost always already exists. Inventing an HTTP route, guessing a hostname,
+or asking the user to build an endpoint is the wrong move — the manifest already tells you
+what is there and how to call it.
+
 ### Available Integrations
 
 | Service | Category | What it does | Tool call |
@@ -1570,12 +1677,20 @@ Those are MCP/API tools, not browser endpoints.
 
 - `POST /mapi/project/{id}/assets` with `wsa_` token → 401 (wsa_ not accepted for asset writes)
 - `/iapi/project/{id}/upload-asset` → 404 (does not exist)
+- A made-up top-level route like `/project/{id}/upload-asset` (missing the `{service}` segment) → 404 — asset writes are `asset_proxy/upload`; the IAPI route shape is always `/project/{id}/{service}/{endpoint}`
 - Vault keys (`{{vault:wpa_...}}`) in browser JavaScript → vault refs are server-side only
 - Custom API proxy with vault key → proxy passes the literal string, not the resolved value
 
 **Use Asset Proxy (Option A) or SAPI upload (Option B)** — both handle auth correctly
 and return CDN URLs. Asset Proxy is simpler because it uses the same `wsa_` token
 you already have for data operations.
+
+**Asset Proxy is not images-only.** It accepts any `slug` and stores any bytes in the
+PAPI asset system. To write or refresh a JSON/CSV/text data file from an admin panel
+(e.g. regenerating a products snapshot at `data/products-snapshot.json`), base64-encode
+the text and POST the same `{ slug, base64, overwrite: true }` body — no special
+"snapshot" or "data" route exists or is needed. Server-side (agent/MCP), use
+`upload_asset(content_text=…, overwrite=true)` instead.
 
 ### Vault-Based API Keys (AI-Requested)
 
