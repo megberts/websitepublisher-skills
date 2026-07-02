@@ -7,7 +7,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.1"
+  version: "1.2"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -126,6 +126,39 @@ These apply to all code written for WebsitePublisher. Read before touching any f
 
 ---
 
+## Security — Tenant Isolation (IDOR)
+
+> The #1 source of repeat audit rounds. Every endpoint is multi-tenant by default.
+> Build with this in mind from the first line — it is far cheaper than catching it in review.
+
+**IDOR = Insecure Direct Object Reference.** The endpoint accepts a direct reference to an object (an ID in the URL or body) and forgets to check that the caller is *allowed* to touch that object. Authorisation is not authentication.
+
+### The rule — every endpoint that accepts an object reference
+
+Any endpoint that takes an object ID (`record_id`, `line_id`, `order_id`, `asset_id`, `entity_id`, `project_id`, …) MUST verify the object belongs to the **resolved** `website_id` *before* any read or write.
+
+- **"Authenticated" ≠ "authorised".** A valid session/token proves *who* the caller is, not *what they may touch*.
+- **Lookup is always scoped.** Always `WHERE website_id = :resolved_website_id`. Never look up by `id` alone and then trust the result.
+- **Scope against the resolver's `website_id`, never the raw `project_id`/`api_project_id` from the request.** The request can lie; the resolver cannot. Use the engine's resolved `website_id` throughout — not the dashproject ID from the body/URL.
+- **Sanitise every response.** On any response that can echo stored data, run the response sanitiser (VaultSanitizer / equivalent) so no secret or cross-tenant field leaks.
+- **Foreign-tenant ID → 404, not 403.** A 403 confirms the object exists; a 404 leaks nothing about another tenant's data.
+- **In doubt: scope tighter.**
+
+### Two failure modes to watch
+
+- **Horizontal** — same privilege level, other tenant (`order/1001` → `order/1002`). Caught by the `website_id` scope.
+- **Vertical** — a user-level endpoint hands back an admin-level object. Ownership alone does not catch this; also check role/capability.
+
+### What actually stops the regression — the test, not the rule
+
+A skill rule reminds; a test enforces. For every new or changed endpoint that accepts an ID, add a **negative cross-tenant test** to `websitepublisher-tests`:
+
+> Request the object with a **foreign-tenant** ID → assert **404** (or 403 for the vertical case).
+
+This runs before deploy. Without it, "remember IDOR" gets forgotten exactly the way it is forgotten now — and you are back in audit round 5.
+
+---
+
 ## Infrastructure Reference
 
 | Resource | Value                        |
@@ -167,5 +200,5 @@ curl -s -X POST "https://api.websitepublisher.ai/tapi/tasks" \
 
 ---
 
-*Dev Skill version: 1.1*
-*Last updated: 24 maart 2026*
+*Dev Skill version: 1.2*
+*Last updated: 29 juni 2026*

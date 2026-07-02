@@ -1,15 +1,17 @@
 ---
 name: websitepublisher-api
 description: >
-   Build and publish websites through conversation using WebsitePublisher.ai.
-   Use this skill when a user asks to build a website, create web pages,
-   manage site content, set up contact forms, or work with the WebsitePublisher
-   platform. Covers all API layers: PAPI (pages/assets), MAPI (entities/data),
-   SAPI (forms), VAPI (credentials), IAPI (integrations), and the WPE Visual Editor.
+   Build and publish websites, web apps, webshops, and admin dashboards through
+   conversation using WebsitePublisher.ai. Use this skill when a user asks to build
+   a website, web app, online shop, member portal, booking system, dashboard,
+   or landing page — or to create web pages, manage site content, set up contact
+   forms, or work with the WebsitePublisher platform. Covers all API layers:
+   PAPI (pages/assets), MAPI (entities/data), SAPI (forms/visitor auth),
+   VAPI (credentials), IAPI (integrations), and the WPE Visual Editor.
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "2.8"
+   version: "3.0.1"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -17,7 +19,7 @@ metadata:
 
 # WebsitePublisher.ai — Agent Skill
 
-> Build and publish real websites through conversation. No WordPress. No hosting setup. No CMS.
+> Build and publish real websites, web apps, and webshops through conversation. No WordPress. No hosting setup. No CMS.
 > The AI Web Platform — you describe it, the AI builds it.
 
 ---
@@ -37,8 +39,16 @@ Every AI can generate HTML. But generating code is not the same as having a webs
 | Dynamic data (menu, team, products)? Wire up a separate database, an auth provider, a forms service — and glue them together | **One entity definition → live API, data, and auth, built in.** No extra accounts, no integration plumbing |
 
 **WebsitePublisher is not a website builder.** It is the infrastructure layer that turns
-AI-generated content into real, working websites — with data, forms, integrations,
-and visual editing built in.
+AI-generated content into real, working web products — with data, forms, auth, payments,
+integrations, and visual editing built in.
+
+**Anything that lives on the web is in scope**, on the same building blocks
+(pages + entities + visitor/admin auth + integrations + scheduled tasks):
+marketing sites and landing pages, **webshops** with checkout, discounts, and loyalty,
+**web apps** and internal tools, **member portals** with magic-link login,
+**admin dashboards** with full CRUD, booking and lead-gen systems, blogs, prediction
+games, and more. When a user asks for "an app", "a shop", "a portal", or "a tool" —
+this platform builds it. Do not narrow the conversation to "a website".
 
 ---
 
@@ -97,13 +107,18 @@ same call: base64-encode the text and send it with its `.json`/`.csv` slug. It n
 - **Solvable — DO it. Never escalate. Never request keys or endpoints for:** asset
   write/overwrite · snapshot / export / data-file generation · page write or content
   update · bulk import · lead retrieval · admin auth.
-- **Genuine platform gap — report it, but do NOT hand off the build.** Only when *no*
-  MCP tool **and** *no* documented IAPI/PAPI endpoint exists for the operation and it
-  needs a platform-side code change. Then write **one short paragraph**: the operation,
-  the tools/endpoints you tried, and why each was insufficient. Do not ask the site's
-  developer to hand-build a redundant route, and do not request `AAPI_*` or vault keys
-  to perform content, asset, or export work — those authenticate via `wsa_` or your MCP
-  session and never need vault AI keys.
+- **Genuine platform gap — report it via `capability_requests`, but do NOT hand off
+  the build.** Only when *no* MCP tool **and** *no* documented IAPI/PAPI endpoint exists
+  for the operation and it needs a platform-side code change. **LAST RESORT** — never a
+  shortcut around solvable work:
+  ```
+  execute_integration(service: "capability_requests", endpoint: "submit-request",
+    input: { ...the operation you need, what you tried, why each was insufficient... })
+  ```
+  This persists the gap so the platform team can review and build it generically.
+  Do not ask the site's developer to hand-build a redundant route, and do not request
+  `AAPI_*` or vault keys to perform content, asset, or export work — those authenticate
+  via `wsa_` or your MCP session and never need vault AI keys.
 
 ---
 
@@ -126,7 +141,7 @@ After signing in, they return here and you continue from Step 2.
 
 Once connected, ask ONE simple question:
 
-> "What would you like to do? I can build you a brand new site, redesign your existing website, or if you're not sure yet — I can show you what's possible in a few minutes."
+> "What would you like to do? I can build you a brand new website, web app, or shop, redesign your existing site, or if you're not sure yet — I can show you what's possible in a few minutes."
 
 ### Path A — "Wow Me" (show first, ask later)
 
@@ -226,7 +241,7 @@ If the user has not specified a style preference, choose a bold direction and co
 
 ---
 
-## Step 3 — Build the Website
+## Step 3 — Build the Website or App
 
 ### Project Setup
 
@@ -248,6 +263,36 @@ If the user has not specified a style preference, choose a bold direction and co
    )
    ```
    This ensures all future sessions automatically match the same design language.
+
+### Integration-First — the decision gate
+
+**Before writing ANY custom data or business logic, ask: does a platform endpoint
+already exist for this?** Run `list_integrations(project_id)` first. If the endpoint
+exists, use it — do not rebuild it in page JavaScript.
+
+This is a **security rule**, not a convenience: integrations are server-side backed —
+credentials in the Vault, input validation, rate limiting, CSRF, and multi-tenant
+scoping are handled by the platform. Custom client-side logic for the same job is
+manipulable by any visitor (prices, stock, points, order data) and untested.
+
+| ❌ Never hand-roll in page JS | ✅ Platform owns it |
+|---|---|
+| Summing cart line items into a total | Read `cart.subtotal_cents` from the cart endpoint |
+| Computing a discount / tier price | `discount` / pricing endpoints calculate it |
+| Checking or updating stock | Inventory endpoints check-stock server-side |
+| Writing loyalty/points balances | Loyalty endpoints do accrual and redemption |
+| Creating or mutating orders | `order-management` endpoints |
+
+**Ownership boundary:** the integration owns totals, tax, discounts, stock, points,
+and order creation. You own the form and rendering the values the integration
+returns. If you catch yourself re-computing a number the platform already returns —
+stop.
+
+**When an integration call fails:** every failure carries a structured
+`error_object` — `type`, `code`, and `message` are always present; `field` and a
+`recovery` hint appear when applicable. **Read it before changing approach.** Never
+replace an integration with custom code because the first call failed — fix the
+call (or trace it with the Request Tracer) instead.
 
 ### Page Structure Guidelines
 
@@ -276,15 +321,15 @@ When you update the fragment, every page that uses it updates automatically.
 - Footer — always
 - Any section that appears on 2+ pages (CTA banner, sidebar, cookie notice)
 
-**How to create and use fragments:**
+**How to create and use fragments — one tool, operation-based:**
+
+All fragment work goes through the single `fragments` tool. Pick an `operation`:
+`list`, `create`, `update`, `patch`, `delete`, `versions`, `rollback`.
 
 1. Create the fragment:
    ```
-   create_fragment(
-     project_id: 12345,
-     name: "site-header",
-     content: "<header>...</header>"
-   )
+   fragments(operation: "create", project_id: 12345,
+     name: "site-header", content: "<header>...</header>")
    ```
 
 2. Include it in any page with an SSI comment:
@@ -294,17 +339,37 @@ When you update the fragment, every page that uses it updates automatically.
    The platform replaces this comment with the fragment content at render time.
    The comment is invisible to visitors.
 
-3. Update the fragment once → all pages reflect the change:
+3. Change the fragment once → all pages reflect the change:
+   - **Small edit → `patch`** (targeted find/replace, token-efficient, keeps version history):
+     ```
+     fragments(operation: "patch", project_id: 12345, name: "site-header",
+       patches: [{ operation: "replace", find: "<a href=\"/old\">", replace: "<a href=\"/new\">" }],
+       patch_summary: "Update nav link")
+     ```
+     Each `find` must match **exactly once**. Use `operation: "delete"` in a patch to remove a snippet.
+   - **Full rewrite → `update`** (full content replace; supports `base_version_hash`
+     optimistic lock from `list` — a mismatch returns 409; `force: true` skips the check):
+     ```
+     fragments(operation: "update", project_id: 12345, name: "site-header",
+       content: "<header>...updated...</header>")
+     ```
+
+4. Version history & rollback:
    ```
-   update_fragment(project_id: 12345, name: "site-header", content: "<header>...updated...</header>")
+   fragments(operation: "versions", project_id: 12345, name: "site-header")
+   fragments(operation: "rollback", project_id: 12345, name: "site-header", target_version: 3)
    ```
+
+All changes invalidate the page cache automatically.
 
 **Rules:**
 - Every multi-page site MUST use fragments for header and footer
 - Fragment names should be descriptive: `site-header`, `site-footer`, `cta-banner`
 - A fragment is a complete HTML block — it does not include `<!DOCTYPE>`, `<html>`, or `<head>`
-- List existing fragments: `list_fragments(project_id: 12345)`
+- List existing fragments + their versions: `fragments(operation: "list", project_id: 12345)`
 - Never copy-paste the same header/footer HTML into multiple pages
+- The old tool names (`create_fragment`, `update_fragment`, `list_fragments`,
+  `delete_fragment`) still dispatch but are **deprecated** — always use `fragments`
 
 ### Building Pages
 
@@ -610,28 +675,41 @@ structure is fine — the AI can update it in 30 seconds when the menu changes.
 items will grow beyond 10, or when multiple pages show the same data differently
 (e.g. a shop overview AND a homepage featured section both pulling from products).
 
-**How to build with MAPI:**
+**How to build with MAPI — two tools, operation-based:**
+
+Schema work goes through `entities` (operations: `list`, `create`, `update`, `delete`,
+`schema`, `add_property`, `delete_property`). Data work goes through `records`
+(operations: `list`, `get`, `create`, `update`, `delete`).
+Property types: `varchar`, `text`, `int`, `datetime`, `tinyint`.
 
 1. Define the entity:
    ```
-   create_entity(project_id: 12345, name: "services", plural_name: "services",
+   entities(operation: "create", project_id: 12345, entity_name: "services",
      properties: [
-       { name: "title", type: "string", required: true },
+       { name: "title", type: "varchar", required: true },
        { name: "description", type: "text" },
-       { name: "icon", type: "string" },
-       { name: "price", type: "string" },
-       { name: "sort_order", type: "number" }
+       { name: "icon", type: "varchar" },
+       { name: "price", type: "varchar" },
+       { name: "sort_order", type: "int" }
      ],
      public_read: true
    )
    ```
+   ⚠️ `public_read: true` makes the data **publicly readable** via
+   `/mapi/public/{projectId}/{entity}` — use it only for content that belongs on the
+   public site (menus, team, services). **Never** on personal or financial data
+   (customers, orders, loyalty). See **Data Access Control** below.
 
 2. Create records:
    ```
-   create_record(project_id: 12345, entity: "services", data: {
+   records(operation: "create", project_id: 12345, entity_name: "services", data: {
      title: "Web Design", description: "...", icon: "🎨", price: "From €499", sort_order: 1
    })
    ```
+   `records(operation: "update", ...)` is partial — only provided fields change.
+   Add a column later with `entities(operation: "add_property", entity_name: "services",
+   property_name: "badge", type: "varchar")`; inspect the schema with
+   `entities(operation: "schema", entity_name: "services")`.
 
 3. **Render with SSR (preferred — SEO-friendly):**
 
@@ -852,17 +930,144 @@ Render one specific record by ID or field match:
 <!--#/wps-mapi -->
 ```
 
-**URL-based slug matching** (planned — requires `_template.html` wildcard routing):
+**URL-based slug matching** (live — via `_template.html` wildcard routing):
 ```html
 <!--#wps-mapi entity="products" record=":slug" match="slug" -->
 <h1>{{name}}</h1>
 <p>{{{description}}}</p>
+<!--#wps-mapi-empty -->
+<p>Product not found.</p>
 <!--#/wps-mapi -->
 ```
-When a visitor opens `/products/wireless-headphones`, the Optimizer will serve
-`/products/_template.html` and resolve `:slug` to `wireless-headphones` for the
-MAPI lookup. Not yet available — use hardcoded `record="42"` or client-side JS
-for detail pages until this is implemented.
+When a visitor opens `/products/wireless-headphones`, the Optimizer serves
+`/products/_template.html` and resolves `:slug` to `wireless-headphones` for the
+MAPI lookup. A non-existent slug falls into the `-empty` branch (serve a 404
+status or a redirect there). `record=":slug"` always takes the **last URL
+segment** as the match value.
+
+#### Dynamic Routed Pages (detail + related list)
+
+A routed page can match a **parent record** (a category, a branch, a "zebra"…)
+and show a **related list** next to it that is filtered server-side on that
+parent. Fully indexable, no client-side JS required. One page template, two
+branches driven by routing (`source`, `entity`, `match="slug"` on the page):
+
+- **match branch** (slug found) → the matched parent + its filtered list
+- **empty branch** (no/unknown slug) → the overview (all items)
+
+```html
+<!--#wps-mapi entity="categories" source="catalog" record=":slug" match="slug" -->
+
+  <!-- MATCH BRANCH: parent is top-level → {{name}}, {{slug}}, {{id}} -->
+  <h1>{{name}}</h1>
+  <div class="product-grid">
+    <!--#wps-mapi entity="products" source="catalog"
+        filter="status:active;category_slug:$route.slug" sort="name:asc" limit="500" -->
+      <a class="product-card" href="/product/{{slug}}">{{name}}</a>
+    <!--#wps-mapi-empty -->
+      <p>No products in this category.</p>
+    <!--#/wps-mapi -->
+  </div>
+
+<!--#wps-mapi-empty -->
+
+  <!-- EMPTY BRANCH: the overview -->
+  <h1>Our products</h1>
+  <div class="product-grid">
+    <!--#wps-mapi entity="products" source="catalog"
+        filter="status:active" sort="name:asc" limit="500" -->
+      <a class="product-card" href="/product/{{slug}}">{{name}}</a>
+    <!--#/wps-mapi -->
+  </div>
+
+<!--#/wps-mapi -->
+```
+
+With `record=":slug"` the last URL segment is the match value:
+`/products` → slug `products` (not found → empty branch = overview),
+`/products/kliklijsten` → slug `kliklijsten` (match branch).
+
+#### Dynamic Filter Tokens
+
+The nested list can inject a value from the **parent / the URL** into its
+`filter` via a server-side token. Tokens are resolved before the filter is
+parsed — outside the template engine — so they are safe to use in `filter`
+attributes (`{{...}}` braces are **not**, see below).
+
+| Token | Resolves to | Notes |
+|---|---|---|
+| `$route.slug` | last URL segment | request-stable — **preferred** |
+| `$route.N` | N-th URL segment (0-based) | request-stable |
+| `$parent.<field>` | field from the router-matched record | generic, but **currently unreliable** inside a nested loop (the matched record may be `null` while the inner loop runs) — prefer `$route.slug` |
+
+```html
+filter="status:active;category_slug:$route.slug"
+```
+
+Unresolvable tokens fall back to `''` → the row simply doesn't match (safe
+failure mode). No `$` token present → no-op.
+
+**Hard rules (why no Handlebars in a filter):**
+
+- **Never put `{{...}}` in a `filter` attribute.** `{{id}}` resolves empty in
+  the nested scope; `{{../id}}` and `{{#if}}` get processed by the engine and
+  corrupt the SSR comment delimiters → the empty branch leaks into the output.
+  Use `$route.` / `$parent.` tokens instead of braces.
+- **Never wrap an SSR loop in `{{#if}}`.** Same reason. Use the native
+  match/empty branch split shown above.
+
+**Prerequisite — filterable field must be top-level.** Filters only match
+top-level keys. To filter products on category slug, the catalog normalizer must
+expose `category_slug` top-level on each product (it does for `source=catalog`).
+A field that only exists nested (e.g. `category.slug`) is not filterable.
+
+#### Per-Record SEO — `<!--#wps-seo -->` (routed detail pages)
+
+On a **routed detail page** (`_template.html` / `record=":slug"`), every record would
+otherwise share the same page-level `<title>` and description — a go-live SEO blocker
+(duplicate titles). The `<!--#wps-seo -->` tag injects per-record SEO **server-side**
+into the `<head>`: `<title>`, meta description, Open Graph, and JSON-LD — before any
+crawler sees the page, no JavaScript involved. One tag per page. Works for both
+`source="catalog"` and plain MAPI entities (no `source` attribute).
+
+```html
+<!--#wps-seo source="catalog" entity="products" record=":slug" match="slug"
+     title="{{name}} — Site Name"
+     description="{{short_description | striptags | truncate:160}}" -->
+  <meta property="og:type" content="product">
+  <meta property="og:title" content="{{name}} — Site Name">
+  <meta property="og:description" content="{{short_description | striptags | truncate:160}}">
+  {{#each images}}{{#if @first}}<meta property="og:image" content="{{this}}">{{/if}}{{/each}}
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"{{name}}","sku":"{{sku}}"{{#each images}}{{#if @first}},"image":"{{this}}"{{/if}}{{/each}}}</script>
+<!--#/wps-seo -->
+```
+
+**Attributes** (on the open tag): `source` / `entity` / `match` work as in `wps-mapi`
+(the tag is self-describing — it does not inherit route context). `record` accepts
+`:slug` (last URL segment), `:N` (N-th segment), or a literal value.
+`title` and `description` go **as attributes** and may contain template tokens.
+
+**Critical rule — title/description are ATTRIBUTES, never elements.** Do not put a
+`<title>` or description `<meta>` element inside the block: the platform strips the
+first `<title>` unconditionally during SEO processing, so an inline element gets
+clobbered before your override runs. Attributes for title/description; all other
+head-HTML (OG, JSON-LD) goes in the block body.
+
+**Behavior:**
+- No `<!--#wps-seo` tag on the page → output is byte-identical (safe everywhere)
+- Strips the page-level duplicates it overrides (title, description, og:title,
+  og:description) and places the per-record versions authoritatively in `<head>`
+- Record not found → the block disappears; the page falls back to page-level SEO
+
+**Caveats:**
+- The template engine HTML-escapes `{{ }}` — JSON-LD string values containing `&` or
+  `"` come out entity-encoded (valid JSON, cosmetically off). Keep JSON-LD fields to
+  safe data: name, sku, image URL.
+- Price/`offers` in JSON-LD is deliberately **not** included by default — whether
+  prices appear in Google (incl./excl. VAT, variable pricing) is the site owner's call.
+- Test SSR on the `*.websitepublisher.ai` **preview domain** — an uninitialized
+  placeholder page on a custom domain may serve fallback content instead of the
+  SSR pipeline.
 
 #### SSR Wrapper Attributes
 
@@ -876,6 +1081,14 @@ The SSR injector adds `data-mapi-ssr` attributes to rendered blocks:
 
 JavaScript can use these to enhance SSR-rendered content (e.g. add client-side
 search/filter on top of the server-rendered list). SSR and JS coexist naturally.
+
+**CSS gotcha (always needed for an SSR list inside grid/flex).** Each SSR loop
+renders inside its `<div data-mapi-ssr="…">` wrapper. A grid/flex container
+around the loop then has only **one** child → one column. Fix:
+
+```css
+[data-mapi-ssr] { display: contents; }
+```
 
 #### Complete Examples
 
@@ -945,6 +1158,55 @@ search/filter on top of the server-rendered list). SSR and JS coexist naturally.
 
 SSR and JS can coexist — use SSR for the initial server-rendered content and JS
 for interactive enhancement on top.
+
+### Data Access Control — `public_read` vs `policy_json`
+
+Two different switches control who can touch entity data. Confusing them creates
+real data leaks — this exact mistake has exposed full customer databases in the wild.
+
+**`public_read` is a VISIBILITY flag, not a security control.**
+Setting `public_read: true` only enables anonymous read via
+`/mapi/public/{projectId}/{entity}`. It does **not** protect the entity and does
+**not** restrict writes. It has exactly one job: making public-site content
+(menus, team, services, blog posts) readable without auth.
+
+**`policy_json` is the access control.** An entity is access-controlled **only if
+it carries an explicit `policy_json`** (set via `entities(operation: "update",
+entity_name: ..., policy_json: {...})`). The policy defines per-action rules and
+an `owner_field` for row-level scoping.
+
+Rules that follow from this:
+
+- **Sensitive data (customers, orders, loyalty accounts, anything with PII or
+  money) must NEVER rely on `public_read` for protection.** Give those entities a
+  `policy_json`, or keep `public_read: false` and access them only via owner-level
+  calls or a dedicated integration.
+- **Visitor-scoped entities** (each logged-in visitor sees/edits only their OWN
+  rows) need two things: a `policy_json` on the entity **and** a real owner column
+  (e.g. `owner_email`) that exists as an actual entity property. The policy's
+  `owner_field` must map to a real column — the engine fails closed otherwise.
+- **A denied write surfaces as HTTP `404 Not found` — not `403`.** This is by
+  design (no existence leak). If a legitimate-looking write returns 404, check the
+  caller identity and the entity policy first, not the record.
+- **Admin panels need no extra wiring.** The platform data-grid and `wsa_` admin
+  sessions run with owner authority over the site — admin CRUD works on
+  policy-protected entities automatically.
+- Get the exact policy shape from `get_skill(skill_name: "dev")` before setting
+  `policy_json` on an entity with real user data — the server validates the JSON
+  is well-formed, not that your rules are semantically correct.
+- Access control is currently **opt-in** (only entities with an explicit
+  `policy_json` are enforced). Strict mode is the platform's end state — design
+  entities with explicit policies **now** so nothing breaks later.
+
+**Visitor "My Account" / "My Orders" pages — supported pattern:**
+The e-commerce order endpoints `list-orders` and `get-order` are callable from a
+**verified SAPI visitor session**. The server scopes results to the session email
+automatically: a visitor sees only their own orders, a client-supplied
+`customer_email` filter is ignored, and a cross-customer `get-order` returns 404.
+Build the page with the SAPI client (visitor auth section below) and call these
+endpoints from the visitor session — no admin token, no custom filtering, no
+workarounds. All other order endpoints (`create-order`, `update-status`,
+`get-order-by-payment`, line-meta) remain owner-only.
 
 ---
 
@@ -1120,6 +1382,44 @@ Before handing over to the user, verify:
 - [ ] Contact form includes `website: ''` honeypot field in the fields object
 - [ ] Visual Editor session offered for image replacement and final tweaks
 
+### Mandatory Security Review (before going live)
+
+A site must **not** be presented as live until this review passes. Run it as the
+final gate — never skip it, even for a quick demo that the user intends to keep.
+
+- [ ] **No secrets in client code.** No API keys, tokens, or passwords in page HTML,
+      inline JS, or assets. All credentials use `{{vault:...}}` references —
+      resolved server-side, never delivered to the browser.
+- [ ] **Admin pages are auth-guarded.** Every admin/dashboard page enforces the
+      IAPI Admin Auth guard server-side. No admin-only data or actions reachable
+      without a valid `wsa_` session. No client-side-only "hidden" protection.
+- [ ] **Entity exposure is intentional.** `public_read` is enabled only on entities
+      meant to be public. No personal data, leads, orders, or admin records exposed
+      via public MAPI endpoints. Remember: `public_read` is a visibility flag, not
+      protection — sensitive entities carry a `policy_json` or stay
+      `public_read: false` (see **Data Access Control**).
+- [ ] **Money math is server-side.** Checkout totals, discounts, tier/volume pricing,
+      and loyalty points are computed and validated **by the platform integrations** —
+      never trusted from client-side JS, `localStorage`, or hidden form fields. A
+      visitor must not be able to change what they pay or what they earn by editing
+      the page. (Real exploits found pre-go-live: client-computed order totals and
+      client-written loyalty points.)
+- [ ] **Admin is protected server-side.** No `showAdmin()`-style JS toggles, hidden
+      DOM, or devtools-bypassable checks as the only barrier — every admin page and
+      admin data call enforces the `wsa_` auth guard server-side.
+- [ ] **No sensitive files on the public CDN.** Exports, snapshots, or data files
+      containing customer/order data are served through an authenticated route
+      (admin auth / asset proxy), never as a world-readable CDN asset.
+- [ ] **Form input is validated.** Required fields set, honeypot present, file
+      uploads (if any) restricted to expected types/sizes via SAPI upload.
+- [ ] **No customer-supplied HTML rendered unescaped.** Visitor/lead/form data shown
+      back on a page is escaped — no raw injection into the DOM.
+- [ ] **Legal pages present where required.** Terms / privacy page exists whenever the
+      site collects personal data (forms, auth, leads).
+
+If any item fails, fix it before declaring the site live. Log the outcome of this
+review in TAPI (`add_task_history`) so the security gate is traceable per project.
+
 ---
 
 ## Platform Knowledge
@@ -1200,9 +1500,10 @@ what is there and how to call it.
 | **Admin Auth** | Built-in | Password-protected admin areas (email/password login, Bearer token auth) | `execute_integration(service: "admin_auth", endpoint: "login")` |
 | **Auth Keys** | Built-in | Request project API keys stored in vault (human-approved) | `execute_integration(service: "auth_keys", endpoint: "request-key")` |
 | **Asset Proxy** | Built-in | Upload/delete assets from browser admin panels (no WPA key needed) | `execute_integration(service: "asset-proxy", endpoint: "upload")` |
-| **Site Context** | Built-in | Store design decisions across sessions | `execute_integration(service: "site_context", endpoint: "set-context")` |
+| **Site Context** | Built-in | Store design tokens (colors, fonts, style, locale) across sessions | `execute_integration(service: "site_context", endpoint: "set-context")` |
 | **Product Catalog** | Built-in | Products, variants, categories, bulk import | `execute_integration(service: "product-catalog", endpoint: "list-products")` |
 | **Request Tracer** | Built-in | Debug API + page requests in real-time | `execute_integration(service: "tracer", endpoint: "start")` |
+| **Capability Requests** | Built-in | Report a genuine platform gap (LAST RESORT — see "You Are the Builder") | `execute_integration(service: "capability_requests", endpoint: "submit-request")` |
 
 ### How integrations work
 
@@ -1213,16 +1514,22 @@ what is there and how to call it.
 API keys are **never exposed** to the AI or the browser. The Vault encrypts them at rest
 and the integration proxy resolves them server-side at execution time.
 
-### Vault References — `{{vault:key_name}}`
+### Vault References — `{{vault:...}}`
 
-The IAPI proxy resolves `{{vault:key_name}}` server-side before making API calls.
+> Written with `...` as placeholder throughout this document: examples containing a
+> literal key-shaped reference are redacted by the platform's secret filter when this
+> skill is delivered via `get_skill`. In real templates and integration inputs, write
+> the actual key name — no spaces, no dots: two opening braces, `vault:your_key_name`,
+> two closing braces.
+
+The IAPI proxy resolves `{{vault:...}}` references (two opening braces, then `vault:` + your key name, then two closing braces — no spaces) server-side before making API calls.
 This is the core security mechanism that keeps secrets out of AI conversations and browser code.
 
 **Where vault references work (server-side only):**
 
 | Context | Works? | Example |
 |---|---|---|
-| `execute_integration` input | ✅ | `"api_key": "{{vault:stripe_key}}"` |
+| `execute_integration` input | ✅ | `"api_key": "{{vault:...}}"` (e.g. key `stripe_key`) |
 | Scheduled tasks (AAPI) | ✅ | Vault refs in task payload resolved at execution |
 | IAPI proxy calls | ✅ | Bearer token from vault |
 | Browser JavaScript | ❌ | Browser cannot access vault — use admin auth (`wsa_`) instead |
@@ -1307,8 +1614,9 @@ or performance is slow — use the Request Tracer to see exactly what happened:
 The trace shows every API request and page render with HTTP method, path, status
 code, duration, SQL query summary, and which server handled the request.
 
-Integration failures include typed error data (`error_type`, `error_code`,
-`error_field`, `recovery`) so you can see exactly what went wrong without guessing.
+Integration failures include typed error data (`error_type`, `error_code`, and
+`error_field` / `recovery` when applicable) so you can see exactly what went
+wrong without guessing.
 
 **When to use the tracer:**
 - Page renders wrong content → trace optimizer request, check SQL queries
@@ -1728,7 +2036,7 @@ The project owner approves via email — the key goes directly into the vault.
    Response: `{ status: "approved" }` (or `"pending"` / `"expired"`)
 
 4. **AI uses the vault reference** in IAPI proxy calls, scheduled tasks, or page templates:
-   `{{vault:wpa_dashboard}}`
+   `{{vault:...}}` with the key name from step 1 (here: `wpa_dashboard`)
 
 The AI never sees the actual token. The key exists only in the vault and is resolved
 server-side by the IAPI proxy.
@@ -1769,35 +2077,56 @@ best practices, regardless of which AI platform the user is on.
 
 Design decisions should be **saved immediately** when made — not at the end of a
 session when they might be forgotten. Use `site_context` as a living design brief
-that any AI session can pick up:
+that any AI session can pick up.
 
-**Save after every design decision:**
+`site_context` stores **design tokens only**: `color_palette`, `fonts`,
+`style_notes`, `locale`. Build status, page progress, and to-dos do **not** belong
+here — that is what Task Tracking (TAPI, next section) is for. Sending any other
+field returns `"No valid fields provided"`.
+
+**Save after every design decision** — writes are a **deep merge**: only the fields
+you send are overwritten, everything else is preserved:
 ```
 execute_integration(
   service: "site_context",
   endpoint: "set-context",
   input: {
-    "brand_name": "Kintsugi Coffee",
-    "primary_color": "#2D5016",
-    "secondary_color": "#F5F0E8",
-    "font_heading": "Playfair Display",
-    "font_body": "Inter",
-    "style_direction": "Warm, artisanal, Japanese-inspired minimalism",
-    "tone_of_voice": "Friendly, knowledgeable, never pretentious",
-    "pages_built": ["homepage", "shop", "about"],
-    "pages_remaining": ["contact", "faq", "product-detail"],
-    "current_status": "Storefront 60% complete, admin not started"
+    color_palette: { primary: "#2D5016", secondary: "#F5F0E8", accent: "#B8860B",
+                     background: "#FAF7F2", text: "#1A1A1A" },
+    fonts: { heading: "Playfair Display", body: "Inter" },
+    style_notes: "Warm, artisanal, Japanese-inspired minimalism",
+    locale: "en"
   }
 )
 ```
 
+Field reference: `color_palette` keys are `primary`, `secondary`, `accent`,
+`background`, `text` (hex strings). `fonts` keys are `heading` and `body`
+(font family names). `style_notes` is free text, max 500 chars. `locale` is
+ISO 639-1 (`"nl"`, `"en"`, `"de"`).
+
+**Sections** — a project with more than one visual style (e.g. public site vs admin
+panel vs email templates) stores each as a named section via the optional `section`
+parameter (`"frontend"`, `"admin"`, ...). Without it, reads and writes target
+`"default"`. Max 10 sections per project. The `"default"` section is also included
+in the `get_project_status` response.
+
 **Retrieve at the start of every session:**
 ```
-execute_integration(
-  service: "site_context",
-  endpoint: "get-context",
-  input: {}
-)
+execute_integration(service: "site_context", endpoint: "get-context", input: {})
+```
+Pass `section: "all"` to get every section as a keyed object.
+
+**List which sections exist:**
+```
+execute_integration(service: "site_context", endpoint: "list-sections", input: {})
+```
+
+**Delete context** — ⚠️ omitting `section` deletes **ALL** sections for the project.
+Always pass the section explicitly:
+```
+execute_integration(service: "site_context", endpoint: "delete-context",
+  input: { section: "admin" })
 ```
 
 This is the single most important continuity tool. Without it, a new AI session
@@ -1887,8 +2216,11 @@ POST   /iapi/project/{id}/leads/get-leads             Retrieve leads (authentica
 POST   /iapi/project/{id}/leads/update-status         Update lead status
 POST   /iapi/project/{id}/resend/send-email           Send email via Resend
 POST   /iapi/project/{id}/mollie/create-payment       Create Mollie payment
-POST   /iapi/project/{id}/site_context/set-context    Save design context
-POST   /iapi/project/{id}/site_context/get-context    Get design context
+POST   /iapi/project/{id}/site_context/set-context    Save design context (deep merge)
+POST   /iapi/project/{id}/site_context/get-context    Get design context (section or "all")
+POST   /iapi/project/{id}/site_context/list-sections  List stored context sections
+POST   /iapi/project/{id}/site_context/delete-context Delete a section (no section = ALL)
+POST   /iapi/project/{id}/capability_requests/submit-request  Report platform gap (last resort)
 POST   /iapi/project/{id}/product-catalog/bulk-upsert-products  Bulk import (up to 500)
 POST   /iapi/project/{id}/tracer/start                Start debug trace session
 POST   /iapi/project/{id}/tracer/logs                 Read trace entries
