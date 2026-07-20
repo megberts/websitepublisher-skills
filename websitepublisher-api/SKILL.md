@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.0.1"
+   version: "3.1.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -405,6 +405,26 @@ These activate WebsitePublisher's built-in SEO engine: canonical tags, Open Grap
 custom scripts, and tracking injection. They are invisible to visitors — the platform
 processes and removes them automatically.
 
+### Editing & Versioning Pages
+
+Once a page exists, prefer **targeted edits over full rewrites** — the same principle as fragments.
+
+- **Small change → `patch_page`** — find/replace on the existing page, token-efficient and it preserves version history. Never re-send the whole document for a one-line change.
+- **Full rewrite → `update_page`** — replaces the entire page content.
+
+**Optimistic locking (prevents accidental overwrites).** Both `update_page` and `patch_page` accept a `base_version_hash` obtained from `get_page` (which returns the page's current `version` and `version_hash`). If the page changed since you read it, the call returns `409` with details instead of clobbering the newer content. Pass `force: true` when you deliberately want to overwrite.
+
+- `get_page(project_id, slug)` → current content + `version_hash`
+- `patch_page(project_id, slug, patches, base_version_hash?)` → each `find` must match exactly once; `force: true` skips the version check. Use a `delete` patch op to remove a snippet.
+- `update_page(project_id, slug, content, base_version_hash?)` → full replace
+
+**Version history & rollback** (same as fragments):
+
+- `get_page_versions(project_id, slug)` → list past versions
+- `rollback_page(project_id, slug, target_version)` → restore an earlier version (creates a new version with the old content; audit trail preserved). Accepts either `target_version` (number) or `target_version_hash`.
+
+All edits invalidate the page cache automatically.
+
 ### Page Metadata
 
 When creating or updating a page, you can pass these metadata fields:
@@ -640,6 +660,8 @@ upload_asset(
 | Edit text asset in place | `patch_asset(project_id: 12345, slug: "js/app.js", patches: [...])` |
 | Replace asset | `upload_asset(project_id: 12345, slug: "images/old.jpg", source_url: "...", overwrite: true)` |
 | Delete asset | `delete_asset(project_id: 12345, slug: "images/unused.jpg")` |
+
+`get_asset` returns the current `version_hash` for optimistic concurrency on later edits. For binary assets larger than 1 MB, `content` is omitted — use the `url` field to download the file directly.
 
 ### Dynamic Data (MAPI) — When Entities Make Sense
 
