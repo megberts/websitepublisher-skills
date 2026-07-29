@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.1.0"
+   version: "3.2.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -967,6 +967,11 @@ MAPI lookup. A non-existent slug falls into the `-empty` branch (serve a 404
 status or a redirect there). `record=":slug"` always takes the **last URL
 segment** as the match value.
 
+> **⚠️ How a routed template is stored — and how to update it later.** You create the template with `create_page(slug: "products/_template.html")`, but the platform stores it as a page whose **slug is the clean route**: `uri` = `/products`, with the template file kept separately as `customfile` = `products/_template.html`. Consequences:
+> - **Get / update / patch it by the clean route, with a leading slash:** `get_page(slug: "/products")`, `patch_page(slug: "/products", …)`, `update_page(slug: "/products", …)`. Passing `products/_template.html` — or even `products` without the leading slash — returns **404 Page not found**.
+> - `get_page("/products")` returns the routing config (`routing: { enabled, source, entity, match }`) plus the current `version_hash` for optimistic updates.
+> - **Re-running `create_page` with the original `_template.html` slug is an upsert** — it overwrites the existing template. Handy when you just want to replace the whole file and don't have the version hash.
+
 #### Dynamic Routed Pages (detail + related list)
 
 A routed page can match a **parent record** (a category, a branch, a "zebra"…)
@@ -1180,6 +1185,51 @@ around the loop then has only **one** child → one column. Fix:
 
 SSR and JS can coexist — use SSR for the initial server-rendered content and JS
 for interactive enhancement on top.
+
+### Translate-Safe JavaScript
+
+Visitors often run browser auto-translate (Google Translate, Edge, Safari). It rewrites
+the live DOM *after* render — splitting text nodes, wrapping them in `<font>`, and
+replacing visible text. JavaScript that reads visible text back, or that a framework
+mutates around a translated node, then breaks. The platform auto-injects a small guard
+into every served page's `<head>` that neutralises the worst case (framework
+`removeChild`/`insertBefore` crashes), but the guard **cannot** fix logic that *reads*
+translated text. Write JS that never depends on rendered text:
+
+1. **Never read visible text for logic or clipboard.** Read from JS state, `data-*`
+   attributes, or input `.value` / hidden inputs — none of these are translated.
+2. **Copy buttons copy from the source string** you already hold in state, not from an
+   element's `textContent`.
+3. **Branch on data, not on what a label reads** (API values, `data-*`, input values).
+4. **Locate elements by class/id selectors, not by text.** Selectors survive
+   translation; text does not.
+5. **Keep `<html lang>` accurate** (it drives the translate offer — that is correct).
+   **Never** add a page-wide `<meta name="google" content="notranslate">` to "fix"
+   translation; that just disables a feature visitors want. Use `translate="no"` only on
+   a specific element whose text must stay verbatim (a code snippet to copy, an API key,
+   an order ID).
+
+```html
+<!-- DON'T: logic depends on rendered (translatable) text -->
+<span id="plan">Agency</span>
+<script>
+  if (document.getElementById('plan').textContent === 'Agency') unlockTeam();   // breaks when translated
+  copyBtn.onclick = () => navigator.clipboard.writeText(promptEl.textContent);  // copies the translation
+</script>
+
+<!-- DO: logic reads untranslated state / attributes -->
+<span id="plan" data-plan="agency">Agency</span>
+<script>
+  const PROMPT = 'Build me a landing page...';          // source string in state
+  if (planEl.dataset.plan === 'agency') unlockTeam();    // reads data-*, never the text
+  copyBtn.onclick = () => navigator.clipboard.writeText(PROMPT);  // copies from state
+</script>
+```
+
+**SSR is inherently translate-safe** — when data is rendered server-side and logic runs
+off the data (not the rendered text), translation cannot break it. Prefer SSR (above);
+reach for client JS only when you truly need interactivity, and then follow the rules
+above.
 
 ### Data Access Control — `public_read` vs `policy_json`
 
@@ -1403,6 +1453,7 @@ Before handing over to the user, verify:
 - [ ] Website URL shared with user: `https://{subdomain}.websitepublisher.ai`
 - [ ] Contact form includes `website: ''` honeypot field in the fields object
 - [ ] Visual Editor session offered for image replacement and final tweaks
+- [ ] **Translate-safe:** client JS reads from state / `data-*` / input values, not visible text; `<html lang>` accurate; no page-wide `notranslate` meta (framework crashes are already handled by the platform-injected guard — see **Translate-Safe JavaScript**)
 
 ### Mandatory Security Review (before going live)
 
@@ -1569,6 +1620,7 @@ integrations only.
 |---|---|
 | Contact form that sends email | SAPI form + Resend integration |
 | Accept payments on website | Stripe or Mollie integration |
+| Quote / offerte request via the cart, **no online payment** | Checkout-flow **invoice mode** (see note below) |
 | SMS confirmation after booking | Twilio integration |
 | Store leads from multiple forms | Built-in Lead Capture |
 | Password-protected admin dashboard | Admin Auth (IAPI admin session) |
@@ -1578,6 +1630,8 @@ integrations only.
 | Upload images from admin panel (browser) | **Asset Proxy** (PAPI assets) or **SAPI upload** (form uploads) |
 | Request a project API key securely | Auth Keys (human-approved, vault-stored) |
 | Debug failing requests or slow pages | Request Tracer |
+
+> **Quote / offerte checkout (no online payment).** To let visitors request a full quote through the normal cart → checkout flow instead of paying, use the checkout-flow **invoice provider**: `initiate-checkout` → `set-customer` → `create-payment` with **`provider: "invoice"`** → `complete-checkout`. No payment is created ("op factuur"); the resulting order is created with status `pending` / `payment_status: unpaid`, and the confirmation email still fires. That order *is* the quote request (products, quantities, customer details). **Requires the project setting `allow_invoice_checkout`.** Combine with hidden prices (`price_cents: 0`) for a pure request-a-quote shop: the cart shows products + quantities only, the order total is €0, and you follow up with a real quote. Full cart/checkout wiring lives in the e-commerce cookbook.
 
 **Always check if an integration exists before building custom solutions.**
 The built-in integrations handle authentication, error handling, rate limiting,
