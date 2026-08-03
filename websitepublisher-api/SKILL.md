@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.2.0"
+   version: "3.3.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1624,7 +1624,8 @@ integrations only.
 | SMS confirmation after booking | Twilio integration |
 | Store leads from multiple forms | Built-in Lead Capture |
 | Password-protected admin dashboard | Admin Auth (IAPI admin session) |
-| Member area with magic link / code login | SAPI Visitor Auth |
+| Open member area (anyone with an email may enrol) | SAPI Visitor Auth |
+| Provisioned / paid / multi-tenant member portal | Tenant Auth (IAPI) — see "Tenant-Protected Pages" |
 | Remember design choices across sessions | Site Context integration |
 | Import 50-500 products at once | `bulk-upsert-products` (Product Catalog) |
 | Upload images from admin panel (browser) | **Asset Proxy** (PAPI assets) or **SAPI upload** (form uploads) |
@@ -1850,9 +1851,12 @@ Does the page need login?
 ├── No → No auth needed (public page)
 └── Yes
     ├── Is the user an admin/owner managing content?
-    │   └── Use Admin Auth (IAPI) — this section
-    └── Is the user a visitor/member accessing gated content?
-        └── Use Visitor Auth (SAPI) — see "Contact Forms (SAPI)" section
+    │   └── Use Admin Auth (IAPI) — see "Admin-Protected Pages"
+    └── Is the user a member/end-user?
+        ├── Open enrolment — anyone with an email may enter (loyalty, gated freebies)?
+        │   └── Use Visitor Auth (SAPI) — see "Contact Forms (SAPI)"
+        └── Provisioned/closed membership — you control access, paid tiers, tenant isolation?
+            └── Use Tenant Auth (IAPI) — see "Tenant-Protected Pages"
 ```
 
 ### Common Pitfalls — Why Admin Auth Has Its Own Pattern
@@ -2134,6 +2138,194 @@ automated data sync tasks, headless API integrations.
 Do NOT use this for visitor-facing pages — those use SAPI sessions (no Bearer token needed).
 
 ---
+
+## Tenant-Protected Pages — Member Portal (tenant_auth)
+
+When building a **provisioned membership community** — paid tiers, courses, a private
+content library, any portal where *you* control who has access — use **Tenant Auth**.
+This is a third auth system, distinct from Admin Auth and Visitor Auth:
+
+| | Admin Auth (IAPI) | **Tenant Auth (IAPI)** | Visitor Auth (SAPI) |
+|---|---|---|---|
+| **Use case** | Single site-admin/owner managing content | **Provisioned members, paid tiers, tenant-isolated portals** | Open member areas — anyone with an email may self-enrol |
+| **Who can log in** | The admins you create | **Only members you provision** (`require_provisioned`, default on) | Anyone who receives a magic link/code |
+| **Login method** | Email + password | **Email OTP and/or password** (per-project config) | Magic link or code |
+| **Isolation** | — | **`tenant_code` per member** | — |
+| **Tokens** | `wsa_` | **`wst_` access + `rft_` rotating refresh** | Session ID (no token on page) |
+| **Route** | `/iapi/project/{id}/admin-auth/...` | **`/iapi/project/{id}/tenant-auth/...`** | `WP.sapi(id).call(...)` |
+
+The `tenant-auth` route is **public and self-contained**: the project id is in the URL,
+so there is **no API key, no SAPI session, and no CSRF** — plain `fetch()` from the page.
+When the site runs on a custom domain, call it **same-origin with a relative URL**
+(`/iapi/project/{id}/tenant-auth/...`); no CORS setup is needed.
+
+### Provisioning members (you control the list)
+
+Members are created server-side via MCP — never from the browser:
+
+```
+execute_integration(
+  project_id: 12345,
+  service: "tenant_auth",
+  endpoint: "create_user",
+  input: { email: "member@example.com", tenant_code: "community", password: "optional", role: "member" }
+)
+```
+
+Omit `password` for a **code-only (passwordless) member**. With `require_provisioned`
+on (default), only emails you have created can authenticate — that is what makes the
+membership *closed*. Related MCP endpoints: `list_users`, `delete_user` (deactivates +
+kills all sessions), `update_password`, `set_tenant_code`, `list_sessions`, and
+`configure` (set `methods` = `email_otp` / `password`, `success_url`, and token TTLs).
+
+### Member Login
+
+**Method A — email OTP (passwordless, default):**
+
+```javascript
+const PROJECT_ID = 12345; // replace with actual project ID
+
+// 1. request a 6-digit code by email (always returns success — no user enumeration)
+await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/request-code`, {
+   method: 'POST',
+   headers: {'Content-Type': 'application/json'},
+   body: JSON.stringify({ email })
+});
+
+// 2. verify the code → access + refresh token
+const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/verify-code`, {
+   method: 'POST',
+   headers: {'Content-Type': 'application/json'},
+   body: JSON.stringify({ email, code })
+});
+const data = await r.json();
+// { success, tenant_code, success_url, token: 'wst_...', refresh_token: 'rft_...' }
+```
+
+**Method B — email + password** (only when the `password` method is enabled):
+
+```javascript
+const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/login`, {
+   method: 'POST',
+   headers: {'Content-Type': 'application/json'},
+   body: JSON.stringify({ email, password })
+});
+const data = await r.json(); // same shape as verify-code
+```
+
+On success, store **both** tokens (triple storage survives navigation, tab reopen, and
+middleware checks) and redirect to `data.success_url` (or `/`):
+
+```javascript
+if (data.success && data.token) {
+   sessionStorage.setItem('tenant_token', data.token);
+   localStorage.setItem('tenant_token', data.token);
+   localStorage.setItem('tenant_refresh', data.refresh_token);
+   document.cookie = `tenant_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
+   window.location.replace(data.success_url || '/');
+}
+```
+
+### Page Rendering — Auth Guard
+
+Immediate redirect if there is no token — **never** a hidden body with an async check:
+
+```html
+<body>
+<script>
+   var token = sessionStorage.getItem('tenant_token')
+           || localStorage.getItem('tenant_token');
+   if (!token) window.location.replace('/login');
+</script>
+
+<!-- content renders immediately for members -->
+<h1>Members Area</h1>
+</body>
+```
+
+Then confirm the token server-side on load to get the member's identity, and to catch
+expired/revoked sessions:
+
+```javascript
+const v = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/verify`, {
+   method: 'POST',
+   headers: {'Content-Type': 'application/json'},
+   body: JSON.stringify({ token: localStorage.getItem('tenant_token') })
+});
+const info = await v.json(); // { valid, email, tenant_code, tenant_user_id }
+if (!info.valid) {
+   // try refresh (below); if that fails, clear storage + redirect to /login
+}
+```
+
+### Refreshing the session
+
+Access tokens are short-lived (default 24h); refresh tokens last longer (default 14d)
+and **rotate on every use** — the old pair is invalidated immediately:
+
+```javascript
+const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/refresh`, {
+   method: 'POST',
+   headers: {'Content-Type': 'application/json'},
+   body: JSON.stringify({ refresh_token: localStorage.getItem('tenant_refresh') })
+});
+const data = await r.json(); // new { token, refresh_token }
+// store the NEW token + refresh_token — the previous ones no longer work
+```
+
+Refresh when `verify` reports `valid:false`, or when an authenticated call returns 401.
+
+### Logout
+
+```javascript
+await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/logout`, {
+   method: 'POST',
+   headers: {'Content-Type': 'application/json'},
+   body: JSON.stringify({ token: localStorage.getItem('tenant_token') })
+});
+sessionStorage.removeItem('tenant_token');
+localStorage.removeItem('tenant_token');
+localStorage.removeItem('tenant_refresh');
+document.cookie = 'tenant_token=; path=/; max-age=0';
+window.location.replace('/login');
+```
+
+### Canonical path — always
+
+| Step | Call | Auth header |
+|------|------|------------|
+| 1a. Request code (OTP) | `POST /iapi/project/{id}/tenant-auth/request-code` | None — body `{email}` |
+| 1b. Or password login | `POST /iapi/project/{id}/tenant-auth/login` | None — body `{email,password}` |
+| 2. Verify code → tokens | `POST /iapi/project/{id}/tenant-auth/verify-code` | None — body `{email,code}` |
+| 3. Store token + refresh_token | session + local + cookie | — |
+| 4. Verify on page load | `POST /iapi/project/{id}/tenant-auth/verify` | None — body `{token}` |
+| 5. Refresh (on 401 / expiry) | `POST /iapi/project/{id}/tenant-auth/refresh` | None — body `{refresh_token}` |
+| 6. Logout | `POST /iapi/project/{id}/tenant-auth/logout` | None — body `{token}` |
+
+### Anti-patterns — never do these for tenant auth
+
+- ❌ SAPI execute: `POST /sapi/project/{id}/execute/tenant_auth/verify` — the post-login
+  actions return **403 "not accessible via visitor session"**. They are served by the
+  dedicated `tenant-auth` IAPI route, not SAPI. (request-code/verify-code/login are the
+  only tenant_auth actions reachable via SAPI; use the IAPI route for everything.)
+- ❌ URL with underscore: `/iapi/project/{id}/tenant_auth/login` — those routes are
+  `tenant-auth` (**hyphen**). The underscore path hits the generic execute route
+  (Bearer-key + CSRF) and returns **419/401**.
+- ❌ Putting a `wsa_`/`wpa_` API key in browser JS to reach tenant auth — not needed and
+  a security violation. The `tenant-auth` route needs no key.
+- ❌ `<body style="visibility:hidden">` with an async auth check — use immediate redirect
+  (see Page Rendering).
+
+The route is fully self-contained: no session, no CSRF, no API key. `verify`/`refresh`/
+`logout` act on the token in the body, so a member can only affect **their own** session.
+
+### Which auth system?
+
+- **Tenant Auth (this section)** — provisioned/closed membership; you control the member
+  list; paid tiers, courses, private libraries; `tenant_code` isolation; password and/or OTP.
+- **Visitor Auth (SAPI)** — open member areas where anyone with an email may self-enrol
+  (loyalty, gated freebies, newsletters). See "Contact Forms (SAPI)".
+- **Admin Auth (IAPI)** — a single site-admin/owner managing content. See "Admin-Protected Pages".
 
 ## AI Continuity — Staying on Track Across Sessions
 
