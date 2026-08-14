@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.3.0"
+   version: "3.3.1"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1574,6 +1574,7 @@ what is there and how to call it.
 | **Auth Keys** | Built-in | Request project API keys stored in vault (human-approved) | `execute_integration(service: "auth_keys", endpoint: "request-key")` |
 | **Asset Proxy** | Built-in | Upload/delete assets from browser admin panels (no WPA key needed) | `execute_integration(service: "asset-proxy", endpoint: "upload")` |
 | **Site Context** | Built-in | Store design tokens (colors, fonts, style, locale) across sessions | `execute_integration(service: "site_context", endpoint: "set-context")` |
+| **Calendar & Booking** | Built-in | Calendars, events, bookable resources (chairs/tables/rooms), slots, bookings | `execute_integration(service: "calendar", endpoint: "get-slots")` |
 | **Product Catalog** | Built-in | Products, variants, categories, bulk import | `execute_integration(service: "product-catalog", endpoint: "list-products")` |
 | **Request Tracer** | Built-in | Debug API + page requests in real-time | `execute_integration(service: "tracer", endpoint: "start")` |
 | **Capability Requests** | Built-in | Report a genuine platform gap (LAST RESORT — see "You Are the Builder") | `execute_integration(service: "capability_requests", endpoint: "submit-request")` |
@@ -2492,7 +2493,39 @@ POST   /iapi/project/{id}/capability_requests/submit-request  Report platform ga
 POST   /iapi/project/{id}/product-catalog/bulk-upsert-products  Bulk import (up to 500)
 POST   /iapi/project/{id}/tracer/start                Start debug trace session
 POST   /iapi/project/{id}/tracer/logs                 Read trace entries
+
+# Calendar & Booking (service: "calendar" — 15 endpoints, all datetimes UTC):
+POST   /iapi/project/{id}/calendar/upsert-calendar    Create/update a calendar (timezone for rendering)
+POST   /iapi/project/{id}/calendar/list-calendars     List calendars
+POST   /iapi/project/{id}/calendar/delete-calendar    Delete calendar + events (refuses while resources attached)
+POST   /iapi/project/{id}/calendar/upsert-event       Create/update event (start_at/end_at UTC)
+POST   /iapi/project/{id}/calendar/delete-event       Delete event
+POST   /iapi/project/{id}/calendar/list-events        Events overlapping [from, to)
+POST   /iapi/project/{id}/calendar/upsert-resource    Bookable resource: type chair|table|room, capacity, config
+POST   /iapi/project/{id}/calendar/list-resources     List resources (filter type/active)
+POST   /iapi/project/{id}/calendar/delete-resource    Delete resource (refuses with upcoming bookings)
+POST   /iapi/project/{id}/calendar/set-availability   Rules per resource: weekdays/slot_minutes/exceptions/vacations
+POST   /iapi/project/{id}/calendar/get-slots          Free slots (tables/chairs) or nights (rooms), local+UTC times
+POST   /iapi/project/{id}/calendar/book               Transactional claim — double bookings impossible; returns cancel_token
+POST   /iapi/project/{id}/calendar/cancel-booking     Cancel via cancel_token (visitor) or booking_id (admin)
+POST   /iapi/project/{id}/calendar/list-bookings      Bookings with filters + pagination
+POST   /iapi/project/{id}/calendar/update-booking-status  pending|confirmed|completed|cancelled|no_show
 ```
+
+### Calendar & Booking — usage notes
+
+- **One model, three verticals**: appointments = `chair` (slot + service duration), restaurant =
+  `table` (slot + `seating_minutes`, `min_party`/`max_party`), hotel = `room` (night granularity,
+  `checkin`/`checkout` dates, `min_stay_nights`). Configure per resource via `config`.
+- A booking automatically creates an event on the resource's calendar; cancelling flips both to
+  `cancelled`. Bookings with a `visitor_email` get a confirmation/cancellation email automatically.
+- **Visitor-facing booking** works today via a SAPI form with an `iapi` action:
+  `action: { type: "iapi", service: "calendar", endpoint: "book", input_template: { resource_id: 12,
+  start_at: "{{fields.start_utc}}", end_at: "{{fields.end_utc}}", visitor_name: "{{fields.name}}",
+  visitor_email: "{{fields.email}}", party_size: "{{fields.party}}", source: "web" } }`.
+  Render available options server-side or fetch them owner-side; anonymous browser calls to
+  `get-slots` are not enabled yet.
+
 
 ### Key SAPI Endpoints (visitor-facing, no bearer token)
 ```
