@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.3.1"
+   version: "3.5.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1451,6 +1451,8 @@ Before handing over to the user, verify:
 - [ ] Design uses distinctive typography and cohesive color palette (not generic AI defaults)
 - [ ] Design context saved via `execute_integration(service: "site_context")` for future consistency
 - [ ] Website URL shared with user: `https://{subdomain}.websitepublisher.ai`
+- [ ] If the user wants their own domain: hand them the two `A` records and point them at
+      Publish → Connect your own domain (see **Custom Domains**) — you cannot connect it
 - [ ] Contact form includes `website: ''` honeypot field in the fields object
 - [ ] Visual Editor session offered for image replacement and final tweaks
 - [ ] **Translate-safe:** client JS reads from state / `data-*` / input values, not visible text; `<html lang>` accurate; no page-wide `notranslate` meta (framework crashes are already handled by the platform-injected guard — see **Translate-Safe JavaScript**)
@@ -1494,6 +1496,77 @@ If any item fails, fix it before declaring the site live. Log the outcome of thi
 review in TAPI (`add_task_history`) so the security gate is traceable per project.
 
 ---
+
+## Things Only the Project Owner Can Enable
+
+A few capabilities are switched on outside the API. There is **no MCP tool and no
+endpoint** for them, so retrying with different parameters will never succeed. When you
+hit one, stop and tell the user what to do.
+
+| What | How it fails | What to tell the user |
+|---|---|---|
+| **Custom domain** | The site stays reachable only on `{subdomain}.websitepublisher.ai` | Dashboard → the project → **Publish** → *Connect your own domain*. See **Custom Domains** |
+| **Email on a custom domain** | `email_account/list-domains` returns empty and `enable-email` refuses the domain | Only available when the domain is registered or transferred through WebsitePublisher. Otherwise: use the project's own Resend key in the vault. See **Custom Domains → Email** |
+| **Invoice checkout** (B2B "pay by invoice" instead of card/iDEAL) | `checkout-flow/create-payment` with `payment_provider: "invoice"` returns **403** | The project setting `allow_invoice_checkout` is off and there is no self-service toggle yet. Email **support@websitepublisher.ai** and ask for it to be enabled on the project |
+
+Say it plainly — "this is a setting only you can turn on, here is where" — and move on to
+the rest of the build. Do not file a capability request for these: they are known, and a
+request does not speed them up.
+
+## Custom Domains — You Cannot Connect One Yourself
+
+A project is always reachable on `https://{subdomain}.websitepublisher.ai`. Connecting a
+customer's own domain is a **dashboard action performed by the project owner**. There is
+no MCP tool and no AI-callable endpoint for it. Your job is to hand the owner the right
+DNS record and tell them where to click.
+
+### The DNS records
+
+Two `A` records, both pointing at the platform load balancer:
+
+| Type | Name / Host | Value | TTL |
+|---|---|---|---|
+| `A` | `@` | `206.189.242.68` | `3600` (or Auto) |
+| `A` | `www` | `206.189.242.68` | `3600` (or Auto) |
+
+That is the whole setup — the same record twice, once for the root and once for `www`.
+The platform routes on the requested hostname, so both land on the right project once the
+domain is saved in the dashboard.
+
+For a subdomain instead of the root (`shop.example.com`), use one `A` record with the
+subdomain label as the host — `shop` — and the same value.
+
+Delete any other `A`, `AAAA` or `CNAME` record on those same names. Two conflicting
+records for one host is the most common reason a domain keeps serving the old site.
+
+### The owner's steps
+
+1. Dashboard → the project → **Publish** → *Connect your own domain*
+2. Enter the domain; the dashboard shows the exact record with copy buttons
+3. Create that record at the DNS provider
+4. **Validate & Save** in the dashboard
+
+SSL is then auto-provisioned via Let's Encrypt. Connecting a custom domain is a **paid
+plan feature**; on a plan that does not allow it the dashboard returns an upgrade prompt.
+
+### Before pointing DNS at us
+
+If the domain currently points at another website platform, those records must be
+**replaced, not supplemented** — and the domain usually has to be released on that
+platform too, or it keeps answering for it. Leftover verification records from a previous
+provider are harmless but do nothing here.
+
+### Email on a custom domain
+
+Email is only offered when the domain is **registered or transferred through
+WebsitePublisher**. On a domain we do not administer we cannot guarantee SPF, DKIM and
+DMARC alignment, so we do not send on its behalf — `email_account/list-domains` will not
+list it and `enable-email` will refuse. That is by design, not a bug.
+
+For transactional mail (OTP, order confirmations) from such a domain, the two working
+options are: transfer the domain to WebsitePublisher, or configure the project's own
+Resend key in the vault and send through that. The second also gives the owner their own
+delivery dashboard.
 
 ## Platform Knowledge
 
@@ -1578,6 +1651,7 @@ what is there and how to call it.
 | **Product Catalog** | Built-in | Products, variants, categories, bulk import | `execute_integration(service: "product-catalog", endpoint: "list-products")` |
 | **Request Tracer** | Built-in | Debug API + page requests in real-time | `execute_integration(service: "tracer", endpoint: "start")` |
 | **Capability Requests** | Built-in | Report a genuine platform gap (LAST RESORT — see "You Are the Builder") | `execute_integration(service: "capability_requests", endpoint: "submit-request")` |
+| **PDF Documents** | Built-in | Branded PDFs from content blocks (`generate`), or pixel-perfect PDFs from your own HTML template (`render-template`) | `execute_integration(service: "pdf_document", endpoint: "render-template")` |
 
 ### How integrations work
 
@@ -1627,6 +1701,8 @@ integrations only.
 | Password-protected admin dashboard | Admin Auth (IAPI admin session) |
 | Open member area (anyone with an email may enrol) | SAPI Visitor Auth |
 | Provisioned / paid / multi-tenant member portal | Tenant Auth (IAPI) — see "Tenant-Protected Pages" |
+| Private file delivery to members (ebooks, paid PDFs) | `gated-files` — see "Member File Downloads" |
+| Signed-in member reads/updates their own record ("My Account") | `account` — see "Member Self-Profile" |
 | Remember design choices across sessions | Site Context integration |
 | Import 50-500 products at once | `bulk-upsert-products` (Product Catalog) |
 | Upload images from admin panel (browser) | **Asset Proxy** (PAPI assets) or **SAPI upload** (form uploads) |
@@ -1709,6 +1785,158 @@ wrong without guessing.
 
 ---
 
+## PDF from Your Own Template — `pdf_document/render-template`
+
+Two ways to make a PDF. `pdf_document/generate` takes content blocks and applies the
+project's branding — fast, zero layout work. `render-template` renders a **project-defined
+HTML template** with full data-binding — use it when the layout must be exact: invoices on
+pre-printed stationery, packing slips, quotes, certificates. The template controls 100% of
+the output; no platform branding is applied.
+
+### The template is a PAPI asset
+
+Upload the template like any asset (`upload_asset`, e.g. `templates/invoice.html`), iterate
+with `patch_asset`. Rules:
+
+- A **complete HTML document** with its own CSS. Set page margins in the template via
+  `@page { margin: ...; }` (A4 portrait). `letterhead_top_mm` exists as a convenience
+  override for pre-printed stationery, but defining `@page` yourself is preferred.
+- **Layout + template tokens only. NEVER put customer data, order data, or secrets in a
+  template** — assets are public on the CDN. Data arrives at render time via `data`.
+- DOMPDF renders it: use tables and inline styles for structure; `position:absolute` works
+  for fixed placement (address blocks). Font is **DejaVu Sans** — full glyph set incl. `€`.
+- Caps: template ≤ 512 KB, rendered HTML ≤ 2 MB. Rate limit 60/hour.
+
+### Template dialect — same engine as SSR pages
+
+`{{var}}` (HTML-escaped — customer strings can never inject markup), `{{{var}}}` (raw,
+only for values the template author controls), dot paths, `{{#if}}/{{#else}}/{{#unless}}`
+with operators (`==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `starts_with`, `ends_with`)
+and full same-type nesting, `{{#each}}` **including nesting** (`{{this}}` for scalar items,
+`@index`, `{{../parent}}`), filter chains.
+
+Money is always **integer cents** on this platform. Format in the template, never in a
+chain:
+
+| Filter | In → out | Example |
+|---|---|---|
+| `money_eur` | cents → `€ 1.234,56` (NL) | `{{total_cents \| money_eur}}` |
+| `vat_incl:21` | VAT-inclusive cents → VAT cents (fiscal rounding) | `{{total_cents \| vat_incl:21 \| money_eur}}` |
+| `divide:N` | numeric division | `{{qty \| divide:2}}` |
+| `date` | date → `13-08-2026` (**default d-m-Y**, format arg optional) | `{{paid_at \| date}}` |
+| `number:2` / `currency:EUR` | NL notation | building blocks under `money_eur` |
+
+Invoice-shaped template fragment (lines with sub-lines, conditional discount):
+
+```html
+{{#each lines}}
+<tr><td>{{name}}</td><td class="right">{{qty}}</td><td class="right">{{price_cents | money_eur}}</td></tr>
+{{#each subs}}<tr><td class="sub" colspan="3">{{this}}</td></tr>{{/each}}
+{{/each}}
+{{#if discount}}<p>Discount: {{discount | money_eur}}</p>{{/if}}
+<p>Total: {{total_cents | money_eur}} — VAT (21%): {{total_cents | vat_incl:21 | money_eur}}</p>
+```
+
+### Calling it
+
+`data` is the **root context** — its keys become the template's top-level variables.
+
+```
+execute_integration(service: "pdf_document", endpoint: "render-template", input: {
+  "template_slug": "templates/invoice.html",
+  "data": { "total_cents": 16170, "paid_at": "2026-08-13", "lines": [ ... ] },
+  "store": false,          // false → in-memory, base64-only (email attachments)
+  "return_base64": true    // default store=true → archived to the private documents
+})                         //   bucket + signed download URL (never on the public CDN)
+```
+
+`data` must be a real object — a JSON *string* is rejected with a 422.
+
+### External images/CSS — strict by design, self-reporting
+
+- **Relative URLs are auto-rewritten to the project's own CDN**: `src="images/logo.png"`
+  just works.
+- Allowed absolutes: `data:` URIs and `https://cdn.websitepublisher.ai/...`. Everything
+  else (other hosts, `http:`, protocol-relative) is **stripped** before rendering and
+  reported back as `data.blocked_assets` in the response. **Check that field after a test
+  render** — if your logo URL shows up there, upload it as a project asset and reference
+  it relatively.
+
+### Automatic invoice printing — the `order_events` chain pattern
+
+Thread the full order object as **one raw token** (exact single tokens keep their type),
+then feed the PDF base64 into the mail step:
+
+This is the `create-subscription` **input** — `steps` is a TOP-LEVEL field. Do NOT wrap
+it in `config`: that is the *stored* shape you see back in `list-subscriptions`, and an
+input `config` field is rejected.
+
+```
+execute_integration(service: "order_events", endpoint: "create-subscription", input: {
+  "event": "order.paid",
+  "target_type": "iapi_chain",
+  "steps": [
+    { "service": "order-management", "endpoint": "get-order",
+      "input_template": { "order_id": "{{fields.order_id}}" } },
+    { "service": "pdf_document", "endpoint": "render-template",
+      "input_template": {
+        "template_slug": "templates/invoice.html",
+        "data": { "order": "{{steps.0.result.order}}" },
+        "store": false, "return_base64": true } },
+    { "service": "resend", "endpoint": "send-email",
+      "input_template": {
+        "from": "shop@yourdomain.com", "to": "printer@yourdomain.com",
+        "subject": "Invoice {{fields.order_id}}",
+        "text": "Attached.",
+        "attachments": [ { "filename": "invoice.pdf",
+                           "content_base64": "{{steps.1.result.data.base64}}" } ] } }
+  ]
+})
+```
+
+Watch the resend attachment field: it is **`content_base64`** (not `content`). Need
+per-line structured data (sizes, prescriptions, options)? Add an
+`order-management/get-line-meta` step and pass its result alongside the order
+(`"lens": "{{steps.1.result}}"`); omit `def_key` unless you have verified the stored
+definition key, and copy the real meta key names from one live `get-line-meta` call.
+
+The template then reads `{{order.total_cents | money_eur}}`, `{{#each order.lines}}`, etc.
+Note: iapi_chain retries default to **off** (steps have real side effects).
+
+### Testing & replaying the chain — `order_events/fire-event`
+
+Never test a chain with a real payment. `fire-event` pushes ONE existing order through
+the exact same payload/queue/retry path as a real transition:
+
+```
+execute_integration(service: "order_events", endpoint: "fire-event", input: {
+  "order_id": 42, "event": "order.paid", "dry_run": true
+})
+```
+
+- **Always `dry_run:true` first** — it reports `would_fire` / `would_skip` per
+  subscription without enqueueing anything. Real fires are REAL: chains send real
+  mail and print real documents.
+- An order+event already delivered to a subscription is skipped (dedup). **A FAILED
+  delivery blocks a new fire just the same** — the dedup row exists either way — so
+  re-running a failed delivery always needs `force: true`. `force` writes a distinct
+  replay key (`{order_id}:{event}:replay:{timestamp}`), keeping the original row and
+  the audit trail intact.
+- Reprinting orders for a NEW subscription needs no `force` (no delivery rows exist
+  yet): create the subscription, verify one order, then fire per order.
+- The response lists per subscription: `action` (`fired`/`skipped`/`would_fire`/
+  `would_skip`), `delivery_id`, and a `reason` on skips. Check the outcome afterwards
+  in `list-deliveries` (filter by `order_id` or `status`).
+
+### Build workflow
+
+1. Upload the template asset. 2. Test-render with `store:false` + sample `data`; decode
+the base64 and check the PDF **and** `blocked_assets`. 3. Iterate via `patch_asset`.
+4. Wire the chain. Errors are explicit: `TEMPLATE_NOT_FOUND`, `TEMPLATE_INVALID`
+(non-`.html` / traversal), `TEMPLATE_TOO_LARGE`, `RENDER_OUTPUT_TOO_LARGE`.
+
+---
+
 ## Admin-Protected Pages — IAPI Admin Auth
 
 > **⚠️ Need to upload images from an admin panel?** Do NOT use `upload_asset`,
@@ -1734,7 +1962,7 @@ SAPI Visitor Auth — they serve different purposes.
 const PROJECT_ID = 12345; // replace with actual project ID
 
 async function login(email, password) {
-   const r = await fetch(`/iapi/project/${PROJECT_ID}/admin-auth/login`, {
+   const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/admin-auth/login`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({email, password})
@@ -1762,7 +1990,7 @@ async function callAdmin(service, endpoint, payload) {
    const token = sessionStorage.getItem('admin_token');
    if (!token) { window.location.replace('/login'); return; }
 
-   const r = await fetch(`/iapi/project/${PROJECT_ID}/${service}/${endpoint}`, {
+   const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/${service}/${endpoint}`, {
       method: 'POST',
       headers: {
          'Content-Type': 'application/json',
@@ -1925,7 +2153,7 @@ function fileToBase64(file) {
 async function uploadImage(file, slug) {
   var base64 = await fileToBase64(file);
 
-  var res = await fetch('/iapi/project/' + PROJECT_ID + '/asset-proxy/upload', {
+  var res = await fetch('https://api.websitepublisher.ai/iapi/project/' + PROJECT_ID + '/asset-proxy/upload', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1996,7 +2224,7 @@ async function uploadImage(file) {
 
 // Save data with image URL — uses admin auth (wsa_ token)
 async function saveProduct(name, imageUrl) {
-  var res = await fetch('/iapi/project/' + PROJECT_ID + '/product-catalog/create-product', {
+  var res = await fetch('https://api.websitepublisher.ai/iapi/project/' + PROJECT_ID + '/product-catalog/create-product', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2157,8 +2385,10 @@ This is a third auth system, distinct from Admin Auth and Visitor Auth:
 
 The `tenant-auth` route is **public and self-contained**: the project id is in the URL,
 so there is **no API key, no SAPI session, and no CSRF** — plain `fetch()` from the page.
-When the site runs on a custom domain, call it **same-origin with a relative URL**
-(`/iapi/project/{id}/tenant-auth/...`); no CORS setup is needed.
+Always call it on the **absolute API host**
+(`https://api.websitepublisher.ai/iapi/project/{id}/tenant-auth/...`), also on a custom
+domain. A relative path is served by the site itself, not by the API: it returns the
+HTML 404 page, and parsing that as JSON throws `Unexpected token '<'`.
 
 ### Provisioning members (you control the list)
 
@@ -2187,14 +2417,14 @@ kills all sessions), `update_password`, `set_tenant_code`, `list_sessions`, and
 const PROJECT_ID = 12345; // replace with actual project ID
 
 // 1. request a 6-digit code by email (always returns success — no user enumeration)
-await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/request-code`, {
+await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/request-code`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ email })
 });
 
 // 2. verify the code → access + refresh token
-const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/verify-code`, {
+const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/verify-code`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ email, code })
@@ -2206,7 +2436,7 @@ const data = await r.json();
 **Method B — email + password** (only when the `password` method is enabled):
 
 ```javascript
-const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/login`, {
+const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/login`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ email, password })
@@ -2248,7 +2478,7 @@ Then confirm the token server-side on load to get the member's identity, and to 
 expired/revoked sessions:
 
 ```javascript
-const v = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/verify`, {
+const v = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/verify`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ token: localStorage.getItem('tenant_token') })
@@ -2265,7 +2495,7 @@ Access tokens are short-lived (default 24h); refresh tokens last longer (default
 and **rotate on every use** — the old pair is invalidated immediately:
 
 ```javascript
-const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/refresh`, {
+const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/refresh`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ refresh_token: localStorage.getItem('tenant_refresh') })
@@ -2279,7 +2509,7 @@ Refresh when `verify` reports `valid:false`, or when an authenticated call retur
 ### Logout
 
 ```javascript
-await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/logout`, {
+await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/logout`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ token: localStorage.getItem('tenant_token') })
@@ -2303,6 +2533,12 @@ window.location.replace('/login');
 | 5. Refresh (on 401 / expiry) | `POST /iapi/project/{id}/tenant-auth/refresh` | None — body `{refresh_token}` |
 | 6. Logout | `POST /iapi/project/{id}/tenant-auth/logout` | None — body `{token}` |
 
+> All paths in this table are relative to the API host. In the browser, prefix them with
+> `https://api.websitepublisher.ai` — including on a custom domain.
+
+Once a member is signed in, do **not** query MAPI from the browser to show them their own
+data. Use the `account` integration — see **Member Self-Profile**.
+
 ### Anti-patterns — never do these for tenant auth
 
 - ❌ SAPI execute: `POST /sapi/project/{id}/execute/tenant_auth/verify` — the post-login
@@ -2312,6 +2548,10 @@ window.location.replace('/login');
 - ❌ URL with underscore: `/iapi/project/{id}/tenant_auth/login` — those routes are
   `tenant-auth` (**hyphen**). The underscore path hits the generic execute route
   (Bearer-key + CSRF) and returns **419/401**.
+- ❌ A relative path from a custom domain: `fetch('/iapi/project/{id}/tenant-auth/verify')`.
+  The site serves that path, not the API — you get the HTML 404 page, and parsing it as
+  JSON throws `Unexpected token '<'`. Always use the absolute host
+  `https://api.websitepublisher.ai`.
 - ❌ Putting a `wsa_`/`wpa_` API key in browser JS to reach tenant auth — not needed and
   a security violation. The `tenant-auth` route needs no key.
 - ❌ `<body style="visibility:hidden">` with an async auth check — use immediate redirect
@@ -2327,6 +2567,183 @@ The route is fully self-contained: no session, no CSRF, no API key. `verify`/`re
 - **Visitor Auth (SAPI)** — open member areas where anyone with an email may self-enrol
   (loyalty, gated freebies, newsletters). See "Contact Forms (SAPI)".
 - **Admin Auth (IAPI)** — a single site-admin/owner managing content. See "Admin-Protected Pages".
+
+## Member File Downloads — Gated Files
+
+For files only paying or provisioned members may download — ebooks, course material,
+paid reports — use the **gated-files** integration.
+
+Files live on a **non-public bucket** — there is never a permanent public URL.
+Every download is checked **live** against the member's session and entitlement, so a
+refund/cancel (`delete_user`) revokes access instantly.
+
+**When to use which:**
+
+| | gated-files | file-downloads |
+|---|---|---|
+| **File location** | Private bucket (never publicly reachable) | Public CDN (URL works forever once seen) |
+| **Access check** | Live tenant session + entitlement, per download | Static token embedded in the page |
+| **Revocation** | Instant — session/grant revoked → next call 403 | Revoke the token; the CDN URL itself stays public |
+| **Use for** | Paid/member content: ebooks, courses, reports | Free lead magnets, low-risk downloads |
+
+### Setup (MCP)
+
+```
+# 1. Project defaults — entitlement + delivery
+execute_integration(project_id: 12345, service: "gated-files", endpoint: "configure",
+  input: { entitlement_mode: "library", delivery_mode: "signed", signed_ttl_secs: 120 })
+
+# 2. Register a file (exactly ONE source: storage_key | base64 | source_url)
+execute_integration(project_id: 12345, service: "gated-files", endpoint: "put-file",
+  input: { filename: "ebook.pdf", content_type: "application/pdf",
+           source_url: "https://cdn.websitepublisher.ai/project12345/files/ebook.pdf" })
+# → returns { id, storage_key } — the file now lives on the PRIVATE bucket
+```
+
+- `entitlement_mode`: `library` — any active member of the file's `tenant_code` (all
+  tenants of the site when omitted) | `asset` — explicit per-file grants via
+  `grant`/`revoke` (`grant_type`: `tenant_code` or `tenant_user`).
+- `delivery_mode`: `signed` (short-lived presigned URL, storage serves the bytes —
+  default) | `stream` (the platform streams the bytes). The **browser code is identical**
+  for both.
+- `source_url` accepts **our own public storage only** (SSRF guard). To ingest a file
+  that lives elsewhere: upload it as a normal project asset first, then pass that CDN
+  URL — and delete the public copy afterwards.
+- Other MCP endpoints: `grant`, `revoke`, `list-files`, `stats`.
+
+### Browser flow — member downloads a file
+
+Requires a logged-in tenant member (`wst_` token — see "Tenant-Protected Pages") plus a
+SAPI session for CSRF:
+
+```javascript
+const PROJECT_ID = 12345;
+const API  = 'https://api.websitepublisher.ai';
+const SAPI = `${API}/sapi/project/${PROJECT_ID}`;
+
+// 1. SAPI session (once per page) → session_id + csrf
+const s = await (await fetch(`${SAPI}/session`, { credentials: 'include' })).json();
+const SID = s.data.session_id, CSRF = s.data.csrf_token;
+
+// 2. Ask for a download URL — tenant Bearer + session + CSRF
+const r = await fetch(`${SAPI}/execute/gated-files/download`, {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type':  'application/json',
+    'X-Session-Id':  SID,                                        // cookie fallback
+    'X-CSRF-Token':  CSRF,
+    'Authorization': 'Bearer ' + localStorage.getItem('tenant_token')
+  },
+  body: JSON.stringify({ file_id: 42, _csrf: CSRF })
+});
+const j = await r.json();
+const data = j.result || j;            // { url, expires_in, delivery, filename }
+
+// 3. Fetch the file within expires_in (seconds) — the URL is short-lived
+if (data.url) window.location.href = data.url;
+```
+
+On a `401 "Session expired"`: re-fetch `${SAPI}/session` and retry once (a stale
+`wss_session` cookie can shadow a fresh session). On `401 "Tenant authentication
+required"`: the member's `wst_` is missing or expired — refresh or re-login first.
+
+### Anti-patterns — never do these for member files
+
+- ❌ Uploading member-only files as normal PAPI assets — they land on the **public CDN**;
+  anyone with the URL can download them forever, whatever gate the page has.
+- ❌ Using `file-downloads` for paid/sensitive content — `verify-token` returns the public
+  CDN URL, which afterwards works without any token.
+- ❌ Embedding a static download token in page JS — everyone who views source has it.
+  gated-files needs no token in the page: the member's **session is the access**.
+
+## Member Self-Profile — `account/get-me`
+
+A signed-in member viewing their own record — "My Account", order history, membership
+status — is a solved problem. Do **not** build it by querying MAPI from the browser and
+filtering client-side.
+
+The `account` integration resolves the identity **server-side from the verified session**.
+The browser never sends an email, an id, or any other identifier, so there is nothing for
+a visitor to tamper with. Each configured source declares an explicit **field allowlist**;
+anything not listed is never returned, so a private column cannot leak by accident.
+
+Works with a verified **Visitor Auth** session and with a **Tenant Auth** member session.
+
+### Configure once (MCP)
+
+```
+execute_integration(project_id: 12345, service: "account", endpoint: "set-profile",
+  input: {
+    enabled: true,
+    require_verified: true,
+    identity: { from: "session_email" },
+    sources: [
+      {
+        key: "me",
+        entity: "members",
+        match: { field: "email", from: "session_email" },
+        fields: ["id", "name", "email", "created_at"],   // allowlist — REQUIRED
+        cardinality: "one",
+        not_found: "null"
+      },
+      {
+        key: "orders",
+        entity: "orders",
+        match: { field: "member_email", from: "session_email" },
+        fields: ["id", "total_cents", "status", "created_at"],
+        cardinality: "many"
+      }
+    ]
+  })
+```
+
+- `cardinality`: `one` → object, `many` → array.
+- `not_found`: `null` (default) or `error`.
+- Child records can be scoped to the matched parent instead of the session email — useful
+  for order lines belonging to the member's own orders.
+- `get-profile` reads the current configuration back; `remove-profile` clears it.
+
+### Browser flow
+
+```javascript
+const PROJECT_ID = 12345;
+const API  = 'https://api.websitepublisher.ai';
+const SAPI = `${API}/sapi/project/${PROJECT_ID}`;
+
+const s = await (await fetch(`${SAPI}/session`, { credentials: 'include' })).json();
+const SID = s.data.session_id, CSRF = s.data.csrf_token;
+
+const r = await fetch(`${SAPI}/execute/account/get-me`, {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Session-Id': SID,
+    'X-CSRF-Token': CSRF,
+    // tenant members only — omit for Visitor Auth:
+    'Authorization': 'Bearer ' + localStorage.getItem('tenant_token')
+  },
+  body: JSON.stringify({ _csrf: CSRF })
+});
+const j = await r.json();
+const data = j.result || j;   // { verified: true, email, me: {...}, orders: [...] }
+```
+
+Without a verified session the call returns **401 `"A verified visitor session is
+required"`** — it fails closed, it does not return an empty profile.
+
+`update-profile` writes back to the same record, restricted to the fields the profile
+allows. The member can only ever reach their own row.
+
+### Anti-patterns
+
+- ❌ Querying a MAPI entity from the browser and filtering on the member's email in JS —
+  the unfiltered rows already reached the browser.
+- ❌ Passing the member's email or id in the request body so the server can look them up —
+  whatever the browser sends, a visitor can change. The session is the identity.
+- ❌ Omitting the `fields` allowlist to "get everything" — it is required precisely so a
+  later column addition cannot silently start leaking.
 
 ## AI Continuity — Staying on Track Across Sessions
 
@@ -2493,6 +2910,8 @@ POST   /iapi/project/{id}/capability_requests/submit-request  Report platform ga
 POST   /iapi/project/{id}/product-catalog/bulk-upsert-products  Bulk import (up to 500)
 POST   /iapi/project/{id}/tracer/start                Start debug trace session
 POST   /iapi/project/{id}/tracer/logs                 Read trace entries
+POST   /iapi/project/{id}/pdf_document/generate       Branded PDF from content blocks
+POST   /iapi/project/{id}/pdf_document/render-template  Own HTML template (PAPI asset) → PDF; data = root context; store:false → base64
 
 # Calendar & Booking (service: "calendar" — 15 endpoints, all datetimes UTC):
 POST   /iapi/project/{id}/calendar/upsert-calendar    Create/update a calendar (timezone for rendering)
