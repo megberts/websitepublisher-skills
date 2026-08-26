@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.5.0"
+   version: "3.5.1"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -586,7 +586,7 @@ to a project. Assets are served globally with caching — fast and reliable.
 
 | Parameter | Use for | Example |
 |---|---|---|
-| `source_url` | Import from any public URL — the server fetches it for you | Images from existing websites, Unsplash, DALL·E, any HTTPS URL |
+| `source_url` | Import from a durably hosted public URL — the server fetches it | Images on an existing website, a stock-photo CDN, a client's current hosting |
 | `content` | Base64-encoded binary data | Images generated locally or received as base64 |
 | `content_text` | Plain text content (saves tokens vs base64) | CSS, JS, JSON, SVG, HTML, XML, MD files |
 
@@ -598,11 +598,23 @@ The `source_url` parameter is the easiest way to bring images into a project. Th
 fetches the file, validates it (HTTPS only, no internal IPs), and stores it on the CDN.
 This works for **any public HTTPS URL** — not limited to any specific platform.
 
-**Common use cases:**
+**Works well:**
 - Migrating images from an existing website (WordPress, Wix, Squarespace, any CMS)
 - Importing stock photos from Unsplash, Pexels, or similar services
-- Saving AI-generated images (DALL·E, Midjourney URLs)
 - Pulling logos or assets from a client's current hosting
+
+**Does NOT work — use `content` (base64) instead:**
+- AI-generated image URLs (DALL·E, Midjourney and similar). These are temporary and
+  signed; the signature is lost when the URL is passed along, so the fetch returns 404.
+- Google Drive and Google Photos links (`drive.google.com`, `lh3.googleusercontent.com`).
+  These need an authenticated session — the server has none, so it gets a 404 even when
+  the file opens fine in your own browser.
+- Any signed cloud-storage link with an expiring token in the query string.
+- Files the user has on their own machine. Point them to the Files page in the dashboard,
+  then use `list_assets` to get the CDN URL.
+
+In production these four categories account for the large majority of failed fetches, so
+check the source before reaching for `source_url`.
 
 **Example — import a single image:**
 ```
