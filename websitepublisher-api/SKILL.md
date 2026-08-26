@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.5.1"
+   version: "3.6.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -774,7 +774,7 @@ Property types: `varchar`, `text`, `int`, `datetime`, `tinyint`.
    **in the browser**. SSR and JS can coexist on the same page.
 
    ```javascript
-   fetch('https://api.websitepublisher.ai/mapi/public/{project_id}/services')
+   fetch('/mapi/public/{project_id}/services')
      .then(r => r.json())
      .then(data => {
        const container = document.getElementById('services-grid');
@@ -1405,7 +1405,7 @@ async function uploadFile(file) {
    form.append('form_name', 'intake');
 
    var res = await fetch(
-           'https://api.websitepublisher.ai/sapi/project/' + PROJECT_ID + '/form/upload',
+           '/sapi/project/' + PROJECT_ID + '/form/upload',
            {
               method: 'POST',
               headers: { 'X-Session-Id': session.session_id },
@@ -1974,7 +1974,7 @@ SAPI Visitor Auth — they serve different purposes.
 const PROJECT_ID = 12345; // replace with actual project ID
 
 async function login(email, password) {
-   const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/admin-auth/login`, {
+   const r = await fetch(`/iapi/project/${PROJECT_ID}/admin-auth/login`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({email, password})
@@ -2002,7 +2002,7 @@ async function callAdmin(service, endpoint, payload) {
    const token = sessionStorage.getItem('admin_token');
    if (!token) { window.location.replace('/login'); return; }
 
-   const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/${service}/${endpoint}`, {
+   const r = await fetch(`/iapi/project/${PROJECT_ID}/${service}/${endpoint}`, {
       method: 'POST',
       headers: {
          'Content-Type': 'application/json',
@@ -2165,7 +2165,7 @@ function fileToBase64(file) {
 async function uploadImage(file, slug) {
   var base64 = await fileToBase64(file);
 
-  var res = await fetch('https://api.websitepublisher.ai/iapi/project/' + PROJECT_ID + '/asset-proxy/upload', {
+  var res = await fetch('/iapi/project/' + PROJECT_ID + '/asset-proxy/upload', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2218,7 +2218,7 @@ async function uploadImage(file) {
   form.append('form_name', 'admin_upload');
 
   var res = await fetch(
-    'https://api.websitepublisher.ai/sapi/project/' + PROJECT_ID + '/form/upload',
+    '/sapi/project/' + PROJECT_ID + '/form/upload',
     {
       method: 'POST',
       headers: { 'X-Session-Id': session.session_id },
@@ -2236,7 +2236,7 @@ async function uploadImage(file) {
 
 // Save data with image URL — uses admin auth (wsa_ token)
 async function saveProduct(name, imageUrl) {
-  var res = await fetch('https://api.websitepublisher.ai/iapi/project/' + PROJECT_ID + '/product-catalog/create-product', {
+  var res = await fetch('/iapi/project/' + PROJECT_ID + '/product-catalog/create-product', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2397,10 +2397,11 @@ This is a third auth system, distinct from Admin Auth and Visitor Auth:
 
 The `tenant-auth` route is **public and self-contained**: the project id is in the URL,
 so there is **no API key, no SAPI session, and no CSRF** — plain `fetch()` from the page.
-Always call it on the **absolute API host**
-(`https://api.websitepublisher.ai/iapi/project/{id}/tenant-auth/...`), also on a custom
-domain. A relative path is served by the site itself, not by the API: it returns the
-HTML 404 page, and parsing that as JSON throws `Unexpected token '<'`.
+Use a **relative path** (`/iapi/project/{id}/tenant-auth/...`). Since August 2026 every
+published site — wildcard subdomain and custom domain alike — proxies `/sapi/`, `/iapi/`,
+`/mapi/` and `/wpe/` straight to the API, so a relative call is same-origin: no CORS
+preflight, and any session cookie stays first-party. The absolute host
+`https://api.websitepublisher.ai` still works and remains valid for existing pages.
 
 ### Provisioning members (you control the list)
 
@@ -2429,14 +2430,14 @@ kills all sessions), `update_password`, `set_tenant_code`, `list_sessions`, and
 const PROJECT_ID = 12345; // replace with actual project ID
 
 // 1. request a 6-digit code by email (always returns success — no user enumeration)
-await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/request-code`, {
+await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/request-code`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ email })
 });
 
 // 2. verify the code → access + refresh token
-const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/verify-code`, {
+const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/verify-code`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ email, code })
@@ -2448,7 +2449,7 @@ const data = await r.json();
 **Method B — email + password** (only when the `password` method is enabled):
 
 ```javascript
-const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/login`, {
+const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/login`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ email, password })
@@ -2490,7 +2491,7 @@ Then confirm the token server-side on load to get the member's identity, and to 
 expired/revoked sessions:
 
 ```javascript
-const v = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/verify`, {
+const v = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/verify`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ token: localStorage.getItem('tenant_token') })
@@ -2507,7 +2508,7 @@ Access tokens are short-lived (default 24h); refresh tokens last longer (default
 and **rotate on every use** — the old pair is invalidated immediately:
 
 ```javascript
-const r = await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/refresh`, {
+const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/refresh`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ refresh_token: localStorage.getItem('tenant_refresh') })
@@ -2521,7 +2522,7 @@ Refresh when `verify` reports `valid:false`, or when an authenticated call retur
 ### Logout
 
 ```javascript
-await fetch(`https://api.websitepublisher.ai/iapi/project/${PROJECT_ID}/tenant-auth/logout`, {
+await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/logout`, {
    method: 'POST',
    headers: {'Content-Type': 'application/json'},
    body: JSON.stringify({ token: localStorage.getItem('tenant_token') })
@@ -2545,8 +2546,8 @@ window.location.replace('/login');
 | 5. Refresh (on 401 / expiry) | `POST /iapi/project/{id}/tenant-auth/refresh` | None — body `{refresh_token}` |
 | 6. Logout | `POST /iapi/project/{id}/tenant-auth/logout` | None — body `{token}` |
 
-> All paths in this table are relative to the API host. In the browser, prefix them with
-> `https://api.websitepublisher.ai` — including on a custom domain.
+> Use these paths as-is from the browser — they resolve against the site's own origin on
+> every published domain. Prefixing them with `https://api.websitepublisher.ai` also works.
 
 Once a member is signed in, do **not** query MAPI from the browser to show them their own
 data. Use the `account` integration — see **Member Self-Profile**.
@@ -2560,10 +2561,11 @@ data. Use the `account` integration — see **Member Self-Profile**.
 - ❌ URL with underscore: `/iapi/project/{id}/tenant_auth/login` — those routes are
   `tenant-auth` (**hyphen**). The underscore path hits the generic execute route
   (Bearer-key + CSRF) and returns **419/401**.
-- ❌ A relative path from a custom domain: `fetch('/iapi/project/{id}/tenant-auth/verify')`.
-  The site serves that path, not the API — you get the HTML 404 page, and parsing it as
-  JSON throws `Unexpected token '<'`. Always use the absolute host
-  `https://api.websitepublisher.ai`.
+- ❌ A relative path to a prefix that is **not** proxied: `/papi/`, `/wapi/`, `/vapi/`,
+  `/dapi/`, `/capi/`. Only `/sapi/`, `/iapi/`, `/mapi/` and `/wpe/` are reachable from a
+  published domain. The site serves everything else, so you get the HTML 404 page and
+  parsing it as JSON throws `Unexpected token '<'`. Use `https://api.websitepublisher.ai`
+  for those — and never from browser JS if they need a key.
 - ❌ Putting a `wsa_`/`wpa_` API key in browser JS to reach tenant auth — not needed and
   a security violation. The `tenant-auth` route needs no key.
 - ❌ `<body style="visibility:hidden">` with an async auth check — use immediate redirect
@@ -2630,7 +2632,7 @@ SAPI session for CSRF:
 
 ```javascript
 const PROJECT_ID = 12345;
-const API  = 'https://api.websitepublisher.ai';
+const API  = '';  // same-origin: /sapi/ and /iapi/ are proxied on every published domain
 const SAPI = `${API}/sapi/project/${PROJECT_ID}`;
 
 // 1. SAPI session (once per page) → session_id + csrf
@@ -2720,7 +2722,7 @@ execute_integration(project_id: 12345, service: "account", endpoint: "set-profil
 
 ```javascript
 const PROJECT_ID = 12345;
-const API  = 'https://api.websitepublisher.ai';
+const API  = '';  // same-origin: /sapi/ and /iapi/ are proxied on every published domain
 const SAPI = `${API}/sapi/project/${PROJECT_ID}`;
 
 const s = await (await fetch(`${SAPI}/session`, { credentials: 'include' })).json();
