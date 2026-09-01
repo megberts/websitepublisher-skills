@@ -7,7 +7,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.3"
+  version: "1.7"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -219,6 +219,22 @@ that tenant's rows (org-wide isolation for sub-tenancy inside one project). Requ
 column and `wst_` tenant sessions. A non-tenant caller resolves to a null identity and is denied. Absent
 = per-caller identity (email for visitors, per-user scope for tenants).
 
+> **Delivery path — read this before configuring a tenant policy.**
+> A tenant-scoped entity is only reachable through a service that runs under a tenant
+> identity. Two exist: **`gated-files`** (file delivery) and, since September 2026, the
+> **`records`** bridge (#1310) — `POST /sapi/project/{id}/execute/records/{list|get}`,
+> read-only, and it refuses any entity without a `policy_json` because an ungoverned
+> entity is a gate pass-through.
+>
+> **Verification status, September 2026.** Deployed on both nodes. Proven live: manifest
+> registration, dispatch, the governed-only refusal (controlled before/after on one entity),
+> the input guards, pagination caps and the read path. **Not yet proven end-to-end: the
+> tenant row-scoping through a real `wst_` session.** The gate layer beneath it is 12/12
+> (#942, July), so what remains untested is specifically the
+> `SapiExecuteController` → `CallerContext` → gate wiring on this route. Until that is
+> green, do not tell a customer their shared content is isolated — verify it with two
+> member accounts first.
+
 ### HTTP contract
 
 - `deny` (tier not granted the action) → **404** (no existence leak).
@@ -227,10 +243,25 @@ column and `wst_` tenant sessions. A non-tenant caller resolves to a null identi
 
 ### `public_read` interaction
 
-The implated public-read shortcut fires **only when there is no policy block**
+The implied public-read shortcut fires **only when there is no policy block**
 (`policy === null && public_read`). Once an entity carries any `policy_json`, `public_read` is **ignored
 entirely** — grants come purely from `rules`. Sensitive entities: set the policy and keep
 `public_read: false`.
+
+### SSR is never a path for governed data
+
+`<!--#wps-mapi -->` server-side rendering reads **only** entities with `public_read: true`, and its
+render cache is keyed on `website_id` + entity name — **no session dimension**. One shared cache serves
+every visitor of that page.
+
+That makes SSR structurally unusable for governed or tenant-scoped data, and it stays that way after
+#1310 — this is the nature of the layer, not a gap to close. Gated content is fetched client-side from
+a verified session via the SAPI execute route.
+
+Side effect worth knowing: when the entity is not public the whole `wps-mapi` block is stripped from the
+output, **including the `wps-mapi-empty` branch**, and the negative result is cached for the full TTL.
+No error surfaces anywhere. An empty block where you expected data almost always means
+`public_read: false`, not "no records" (#1311).
 
 ### Enforcement boundary
 
@@ -238,6 +269,19 @@ Owner/admin (`wsa_`) sessions run at `project` tier (`all`), so admin panels and
 governed entities with no extra wiring. **Always test a policy activation on a sandbox entity (project
 22492) before flipping `policy_json` on a live table** — the server validates JSON shape, not rule
 correctness, so a wrong `owner_field` or over-permissive rule is accepted.
+
+> **Testing as owner does not exercise the policy at all.**
+> An owner runs at tier `project` with grant `all`, and `all` performs no ownership matching — so
+> `owner_field` is never read. A misspelled or non-existent `owner_field` therefore returns rows
+> normally in an owner test, and only fails (fail-closed, HTTP 500) once a real `verified` or tenant
+> caller hits the `own` path.
+>
+> Verified live on 2026-09-01: setting `owner_field: "kolom_bestaat_niet"` on a governed sandbox entity
+> returned **all three rows to an owner, with no error**. The same policy would have broken for every
+> member.
+>
+> So an owner test proves only that the entity is governed — never that the scoping is correct. Verify
+> every policy from an actual member or visitor session before trusting it.
 
 ### Worked examples
 
@@ -269,6 +313,30 @@ Org-wide tenant isolation (all users of a tenant share the org's rows; SAPI/`wst
 
 `create:self` auto-stamps `tenant_code` for the creating tenant; a cross-tenant row → 403; a
 non-tenant/visitor caller → 404. Verified 12/12 at the gate level (#942, 2026-07-29).
+
+**Reachable from a browser via the `records` bridge (#1310)** — read the delivery-path note
+under *Grammar* above for its verification status before you build on this example.
+
+### Triaging a data-access capability request
+
+Most "we need a feature for X" requests about member data are **configuration, not code**.
+Two worked cases: 24451 (`update-entity-policy-json`) turned out to be a live feature the
+requester could not find, and 27203 asked for a new match mode that already existed under
+another name (`owner_scope`). In both, the platform answer was a policy plus a pointer.
+
+Before scoping any build, separate the two questions:
+
+- **"Which rows may this person see?"** → `policy_json`. Almost always configuration.
+  `account.sources` covers per-user reads across arbitrary entities; `records` +
+  `owner_scope: "tenant"` covers org-wide sharing; `gated-files` covers files.
+- **"Can any service reach this data under the caller's identity at all?"** → that is the
+  question worth building for. Non-owner identity exists only on the SAPI execute route,
+  so a genuine gap is always a **missing route**, never a missing feature. #1310 is the
+  example: one read verb on a route that already carried the identity.
+
+If a request does not survive the first question, answer it with configuration and close
+it — and check whether the customer-facing skill made it findable, because a request that
+should have been self-service is usually a documentation failure rather than a user error.
 
 ### Negative cross-tenant test (required for policy changes)
 
@@ -320,5 +388,5 @@ curl -s -X POST "https://api.websitepublisher.ai/tapi/tasks" \
 
 ---
 
-*Dev Skill version: 1.3*
-*Last updated: 29 juli 2026*
+*Dev Skill version: 1.7*
+*Last updated: 1 september 2026*

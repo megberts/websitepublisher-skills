@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.6.0"
+   version: "3.10.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -58,6 +58,31 @@ this platform builds it. Do not narrow the conversation to "a website".
 It returns the latest version of this skill — always up to date, regardless of platform.
 
 If `get_skill` is not available, continue with this document.
+
+**The person on the other side already decided to do this.** These tools are only here
+because they went looking for WebsitePublisher, signed in, and connected it to this
+assistant. Wanting a real site online is not something to confirm — it is the reason the
+connection exists. Ask what the site should say; never ask whether to put it online, and
+never offer a mock-up, canvas or artifact as an intermediate step. Offering to "prepare
+something first" reads as hesitation about a decision they already made.
+
+**And everything you build here is live the moment you write it.** There is no draft mode, no
+staging area and no separate deploy or publish step: every `create_page`, `update_page`,
+`patch_page` and asset upload is immediately reachable on the project's public subdomain,
+and anything you publish can be found and indexed. Someone reaching for these tools is not
+sketching an idea — they are putting a site online.
+
+Three consequences, and they are not stylistic:
+
+- **Build on the platform, not beside it.** Do not draft the site as a local file, a canvas
+  or an artifact and copy it over at the end. Write pages with the tools; that *is* the
+  site.
+- **Half-finished is published.** A page written to try something out is online under a
+  real URL. Finish it, replace it, or delete it — never leave placeholder copy, lorem
+  ipsum, or a broken layout sitting on a live domain.
+- **Treat every write as a change to a production site.** Read a page before you overwrite
+  it, prefer `patch_page` for small edits, and check the go-live checklist before telling
+  someone their site is ready.
 
 ---
 
@@ -106,11 +131,15 @@ same call: base64-encode the text and send it with its `.json`/`.csv` slug. It n
 
 - **Solvable — DO it. Never escalate. Never request keys or endpoints for:** asset
   write/overwrite · snapshot / export / data-file generation · page write or content
-  update · bulk import · lead retrieval · admin auth.
+  update · bulk import · lead retrieval · admin auth · **member-area data access
+  (who sees which rows) — that is a `policy_json` plus configuration, see
+  *AuthZ-First***.
 - **Genuine platform gap — report it via `capability_requests`, but do NOT hand off
   the build.** Only when *no* MCP tool **and** *no* documented IAPI/PAPI endpoint exists
-  for the operation and it needs a platform-side code change. **LAST RESORT** — never a
-  shortcut around solvable work:
+  for the operation and it needs a platform-side code change. For anything member-facing,
+  first work through the five pieces in *AuthZ-First* and name which one you would still
+  be missing — "no integration is called what I want" is not a gap. **LAST RESORT** —
+  never a shortcut around solvable work:
   ```
   execute_integration(service: "capability_requests", endpoint: "submit-request",
     input: { ...the operation you need, what you tried, why each was insufficient... })
@@ -293,6 +322,49 @@ stop.
 `recovery` hint appear when applicable. **Read it before changing approach.** Never
 replace an integration with custom code because the first call failed — fix the
 call (or trace it with the Request Tracer) instead.
+
+**Scope of this rule:** it governs *business logic* — anything that computes money,
+stock, state or identity. It does **not** govern *access to data*. That is the next
+section, and there the answer is usually the opposite: you assemble it yourself.
+
+### AuthZ-First — what you assemble, not request
+
+Confusing "no integration matches my feature" with "the platform cannot do this" is the
+most common way a perfectly buildable member area gets written off as a gap. The two
+questions are different:
+
+- **Who computes the number?** The platform. Totals, tax, discounts, points, stock,
+  orders, tokens, sessions. Never hand-roll these (see above).
+- **Who may see which rows, and which fields?** **You.** That is not a feature to
+  request — it is a `policy_json` on an entity plus a service that already runs under
+  the visitor's or member's session identity.
+
+Almost every "members-only" requirement is assembled from five pieces that already exist:
+
+| What you need | What you assemble it from |
+|---|---|
+| A member reads/edits **their own** rows, across several entities | `account` with configured `sources` |
+| Several members of one organisation share **the same** rows | `records` + `policy_json` with `owner_scope: "tenant"` |
+| Files only members may download | `gated-files` |
+| Who the members are, and which organisation they belong to | `tenant_auth` |
+| Throwaway per-visitor state | SAPI `/data` |
+
+`account.sources` is the most underused of these. It is **config-driven**, so "My
+Account", "My Orders", "My Bookings" and "My Documents" are not four features — they are
+one integration with a different `sources` array, each with its own entity, its own field
+allowlist and its own cardinality. Reach for a new configuration before you reach for a
+new capability.
+
+**Before filing a capability request for anything member-facing**, name which of those
+five pieces you would still be missing after configuring the others. If the honest answer
+is "none — I just have to wire them up", it is not a gap and the request will come back as
+configuration advice.
+
+A genuine gap looks different: **no service on the SAPI execute route can reach the data
+under the caller's identity at all.** That does happen — the `records` bridge exists
+because shared tenant reads had no delivery path until September 2026 — but it is rare,
+and when it occurs it is a missing *route*, never a missing *feature*. Describe it that
+way and it gets built quickly.
 
 ### Page Structure Guidelines
 
@@ -796,6 +868,18 @@ Property types: `varchar`, `text`, `int`, `datetime`, `tinyint`.
 SSR uses Handlebars-inspired syntax processed server-side by the Optimizer.
 The data is embedded directly in the HTML — no JavaScript needed, fully indexable by search engines.
 
+> **SSR is public-only. Read this before using it for anything behind a login.**
+> SSR renders entities with `public_read: true` and nothing else, and its render cache
+> is keyed on website + entity — **not** on the visitor session. One shared cache serves
+> every visitor of the page, so SSR can never render data that differs per person or per
+> organisation. Use it for catalogues, blogs and other public content; for anything
+> gated, fetch client-side from a verified session.
+>
+> If the entity is not public, the entire `wps-mapi` block is removed from the output —
+> **including the `wps-mapi-empty` branch**. You get an empty spot on the page and no
+> error anywhere. An empty block where you expected data almost always means
+> `public_read: false`, not "no records".
+
 #### Basic Syntax
 
 ```
@@ -1187,6 +1271,7 @@ around the loop then has only **one** child → one column. Fix:
 | Shopping cart, wishlist | **JS** | User-specific state |
 | Product list WITH search bar | **SSR + JS** | SSR for initial load + SEO, JS for interaction |
 | Admin dashboard tables | **JS only** | No SEO needed, always behind login |
+| Anything behind a visitor or member login | **JS only** | SSR is public-only and its cache is shared per page — it can never render gated data |
 
 **Decision flow:**
 1. Will Google need to index this content? → Consider SSR
@@ -1275,6 +1360,13 @@ Rules that follow from this:
 - **Admin panels need no extra wiring.** The platform data-grid and `wsa_` admin
   sessions run with owner authority over the site — admin CRUD works on
   policy-protected entities automatically.
+- **But owner access does not test the policy.** Because an owner session has
+  authority over everything, it never performs the row-ownership check at all —
+  so a policy with a misspelled or non-existent `owner_field` still returns every
+  row when you check it as the owner, and only breaks once a real logged-in
+  visitor loads the page. Checking a policy as the owner proves only that it is
+  active, never that it scopes correctly. Always verify from an actual visitor
+  session before you tell anyone their data is protected.
 - Get the exact policy shape from `get_skill(skill_name: "dev")` before setting
   `policy_json` on an entity with real user data — the server validates the JSON
   is well-formed, not that your rules are semantically correct.
@@ -1291,6 +1383,24 @@ Build the page with the SAPI client (visitor auth section below) and call these
 endpoints from the visitor session — no admin token, no custom filtering, no
 workarounds. All other order endpoints (`create-order`, `update-status`,
 `get-order-by-payment`, line-meta) remain owner-only.
+
+**Shared gated content — supported pattern.**
+A page where several named members read the *same* protected records — a team wiki, an
+internal project log, shared documentation — uses the `records` integration with a
+`policy_json` carrying `owner_scope: "tenant"`. The policy decides which rows each member
+sees and which fields are stripped; the browser never sends an identity. See
+*Shared Member Content* below for the policy shape, the browser call and the guards.
+
+Two rules that matter more here than anywhere else:
+
+- **Never reach for `public_read: true` to make a member page "work".** The content becomes
+  readable at `/mapi/public/{projectId}/{entity}` by anyone with the URL, and a login gate
+  in the page protects nothing — it runs in the browser, and `curl` never sees it.
+- **Never render it with SSR.** The render cache is shared per page, not per session.
+
+If the content genuinely cannot be modelled this way, `gated-files` remains available for
+file delivery: private storage, entitlement checked live, instant revocation — downloads
+rather than browsable content.
 
 ---
 
@@ -2758,6 +2868,102 @@ allows. The member can only ever reach their own row.
   whatever the browser sends, a visitor can change. The session is the identity.
 - ❌ Omitting the `fields` allowlist to "get everything" — it is required precisely so a
   later column addition cannot silently start leaking.
+
+## Shared Member Content — `records`
+
+`account/get-me` answers "show me **my** row". A different question is "show **our** rows":
+a team wiki, an internal project log, shared documentation that several named members read
+together. That is what the `records` integration is for.
+
+It reads a MAPI entity under the identity the session already established, and the entity's
+`policy_json` decides which rows come back and which fields are stripped. The browser never
+sends an identity, so there is nothing to tamper with.
+
+> **New (September 2026).** The bridge is deployed and the governed-entity refusal, the
+> input guards and the read path are verified. The **tenant row-scoping itself has been
+> proven at the policy layer but not yet end-to-end through a live member session.** Until
+> you have seen it work with two real accounts, treat a `records` page as unverified: check
+> it from an actual member login before you tell anyone their content is private.
+
+### Requirements
+
+- The entity **must** carry a `policy_json`. An entity without one returns **404** — that is
+  deliberate: an ungoverned entity would hand back every row.
+- Keep `public_read: false`. The policy decides access; `public_read` is ignored once a
+  policy exists.
+- Read-only. Members cannot write through this route.
+- **Not SSR.** See the SSR warning earlier in this document — the render cache is shared
+  across visitors, so gated content must be fetched client-side.
+
+### Policy for shared content
+
+All members of one organisation share the same rows — no per-row ownership:
+
+```json
+{ "owner_field": "tenant_code",
+  "owner_scope": "tenant",
+  "rules": {
+    "read": {"verified":"own","project":"all"},
+    "list": {"verified":"own","project":"all"} },
+  "fields": { "verified": { "hide": ["internal_note"] } } }
+```
+
+Every member of that tenant sees the tenant's rows; a member of another tenant sees none.
+Requires **Tenant Auth** (`wst_`) — plain Visitor Auth gives a per-person identity and
+cannot express "our rows".
+
+### Browser flow
+
+```javascript
+const PROJECT_ID = 12345;
+const API  = '';  // same-origin: /sapi/ and /iapi/ are proxied on every published domain
+const SAPI = `${API}/sapi/project/${PROJECT_ID}`;
+
+const s = await (await fetch(`${SAPI}/session`, { credentials: 'include' })).json();
+const SID = s.data.session_id, CSRF = s.data.csrf_token;
+
+const r = await fetch(`${SAPI}/execute/records/list`, {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type':  'application/json',
+    'X-Session-Id':  SID,
+    'X-CSRF-Token':  CSRF,
+    'Authorization': 'Bearer ' + localStorage.getItem('tenant_token')
+  },
+  body: JSON.stringify({
+    entity: 'iteration_log',
+    filter: { published: 1 },      // optional, equality only
+    sort_by: 'id', sort_order: 'ASC',
+    per_page: 50, offset: 0,
+    _csrf: CSRF
+  })
+});
+const j = await r.json();
+const data = j.result || j;   // { entity, data: [...], pagination: {...} }
+```
+
+`records/get` takes `{ entity, id }` and returns a single record.
+
+### What the guards refuse, and why
+
+- **Filtering or sorting on a field the policy hides → 422.** Hiding a column keeps it out
+  of the response, but filtering on it would let a member binary-search the value from the
+  rows that come back. Both are blocked.
+- **Filtering on the `owner_field` → 422.** Scope is set by the policy, never by the client.
+- **A record belonging to another tenant → 403.** An unknown record, an unknown entity, or an
+  ungoverned entity → **404**, all indistinguishable from outside.
+- `per_page` is capped at 200.
+
+### Anti-patterns
+
+- ❌ Setting `public_read: true` "just to get it working" — the content becomes readable at
+  `/mapi/public/{projectId}/{entity}` by anyone, and a login gate in the page protects
+  nothing because it runs in the browser.
+- ❌ Rendering shared member content with `<!--#wps-mapi -->` — the SSR cache is shared per
+  page, so the first member's data would be served to everyone.
+- ❌ Checking the policy as the project owner and concluding it works — an owner bypasses row
+  scoping entirely. Verify from a real member session.
 
 ## AI Continuity — Staying on Track Across Sessions
 
