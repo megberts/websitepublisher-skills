@@ -7,7 +7,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "1.7"
+  version: "1.8"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -226,14 +226,19 @@ column and `wst_` tenant sessions. A non-tenant caller resolves to a null identi
 > read-only, and it refuses any entity without a `policy_json` because an ungoverned
 > entity is a gate pass-through.
 >
-> **Verification status, September 2026.** Deployed on both nodes. Proven live: manifest
-> registration, dispatch, the governed-only refusal (controlled before/after on one entity),
-> the input guards, pagination caps and the read path. **Not yet proven end-to-end: the
-> tenant row-scoping through a real `wst_` session.** The gate layer beneath it is 12/12
-> (#942, July), so what remains untested is specifically the
-> `SapiExecuteController` → `CallerContext` → gate wiring on this route. Until that is
-> green, do not tell a customer their shared content is isolated — verify it with two
-> member accounts first.
+> **Verified end-to-end, 1 September 2026.** Tested from outside the cluster against a live
+> tenant session: two users of one tenant read the same rows — rows created by the *owner*,
+> so nothing carried a per-user stamp, which is what proves the match runs on the bare
+> `tenant_code` and not on `tenant:{code}:{uid}`. A member of another tenant sees only their
+> own; a cross-tenant record returns 403; a session without a `wst_` Bearer returns 401;
+> `fields.verified.hide[]` columns stay out of the response; and `pagination.total` is
+> scoped too (2 and 1, versus 3 as owner), so the count runs through the same gate.
+>
+> **Error shape — read this before writing browser code.** Only what the controller itself
+> rejects (no session, missing CSRF) returns a real HTTP status. Everything the integration
+> refuses — 403, 404, 422, 409 — arrives as **HTTP 200** with `success: false` and an
+> `upstream_status`. Branching on `res.ok` turns a permission denial into a silent empty
+> render. Check `success`.
 
 ### HTTP contract
 
@@ -388,5 +393,5 @@ curl -s -X POST "https://api.websitepublisher.ai/tapi/tasks" \
 
 ---
 
-*Dev Skill version: 1.7*
+*Dev Skill version: 1.8*
 *Last updated: 1 september 2026*

@@ -11,7 +11,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.10.0"
+   version: "3.12.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1756,24 +1756,168 @@ what is there and how to call it.
 
 ### Available Integrations
 
-| Service | Category | What it does | Tool call |
-|---|---|---|---|
-| **Resend** | Email | Transactional emails (contact forms, notifications) | `execute_integration(service: "resend", endpoint: "send-email")` |
-| **Mailgun** | Email | Domain-level email sending | `execute_integration(service: "mailgun", endpoint: "send-email")` |
-| **SendGrid** | Email | High-volume email delivery | `execute_integration(service: "sendgrid", endpoint: "send-email")` |
-| **Stripe** | Payments | Checkout sessions, payment processing | `execute_integration(service: "stripe", endpoint: "create-checkout-session")` |
-| **Mollie** | Payments | European payments (iDEAL, Bancontact, cards) | `execute_integration(service: "mollie", endpoint: "create-payment")` |
-| **Twilio** | SMS | Text messages (confirmations, alerts) | `execute_integration(service: "twilio", endpoint: "send-sms")` |
-| **Lead Capture** | Built-in | Store form submissions as leads | Form action `{"type": "leads"}` |
-| **Admin Auth** | Built-in | Password-protected admin areas (email/password login, Bearer token auth) | `execute_integration(service: "admin_auth", endpoint: "login")` |
-| **Auth Keys** | Built-in | Request project API keys stored in vault (human-approved) | `execute_integration(service: "auth_keys", endpoint: "request-key")` |
-| **Asset Proxy** | Built-in | Upload/delete assets from browser admin panels (no WPA key needed) | `execute_integration(service: "asset-proxy", endpoint: "upload")` |
-| **Site Context** | Built-in | Store design tokens (colors, fonts, style, locale) across sessions | `execute_integration(service: "site_context", endpoint: "set-context")` |
-| **Calendar & Booking** | Built-in | Calendars, events, bookable resources (chairs/tables/rooms), slots, bookings | `execute_integration(service: "calendar", endpoint: "get-slots")` |
-| **Product Catalog** | Built-in | Products, variants, categories, bulk import | `execute_integration(service: "product-catalog", endpoint: "list-products")` |
-| **Request Tracer** | Built-in | Debug API + page requests in real-time | `execute_integration(service: "tracer", endpoint: "start")` |
-| **Capability Requests** | Built-in | Report a genuine platform gap (LAST RESORT — see "You Are the Builder") | `execute_integration(service: "capability_requests", endpoint: "submit-request")` |
-| **PDF Documents** | Built-in | Branded PDFs from content blocks (`generate`), or pixel-perfect PDFs from your own HTML template (`render-template`) | `execute_integration(service: "pdf_document", endpoint: "render-template")` |
+All of these are called the same way — `execute_integration(project_id, service, endpoint, input)` —
+and `get_integration_schema(project_id, service)` gives the exact input fields per endpoint.
+The **"Reach for it when"** column is the part that matters most: it is the bridge from what the
+user actually says to the capability that already exists. If a request matches one of those
+phrases, the answer is never "I can't do that" — it is `list_integrations` followed by the call.
+
+**Built-in — no API key, no setup, ready on every project.**
+
+*Content, pages & media*
+
+| Service | What it does | Reach for it when the user says… |
+|---|---|---|
+| `blog` | Posts, categories, RSS feed generation | "blog", "news section", "articles", "RSS" |
+| `pages` | List pages from inside a page/integration context | "which pages exist", dynamic navigation |
+| `records` | Read entity records from a page context (read-only lane) | server-rendered lists without admin auth |
+| `data_grid` | Drop-in editable data grid for admin panels | "table I can edit", "spreadsheet view", "CRUD screen" |
+| `asset_proxy` | Upload/delete assets from a browser admin panel (no WPA key) | "upload images from the admin panel" |
+| `versioning` | Asset version history + rollback | "restore the previous version", "undo that CSS change" |
+| `site_context` | Store design tokens (colors, fonts, style, locale) across sessions | "keep the same style next time" |
+| `site-import` | Import an existing website into the project | "move my current site over", "rebuild what I have" |
+| `schema-org` | Generate/detect structured data (JSON-LD) | "rich snippets", "structured data", "SEO markup" |
+| `web-scraper` | Fetch and parse an external page (robots-aware) | "pull the content from this URL" |
+
+*Commerce — cart, checkout, order, fulfilment*
+
+| Service | What it does | Reach for it when the user says… |
+|---|---|---|
+| `product-catalog` | Products, variants, categories, bulk import | "webshop", "products", "catalog" |
+| `product-search` | Search, filter and autocomplete over the catalog | "search bar for products", "filters" |
+| `shopping-cart` | Server-side cart: add/update/remove, price, clear | "cart", "basket" |
+| `checkout-flow` | Checkout state machine incl. **invoice mode** (quote, no online payment) | "checkout", "order on account", "request a quote" |
+| `order-management` | Orders, statuses, line metadata, lookup by payment | "my orders", "order status" |
+| `invoice-generator` | Generate, fetch, list and credit invoices | "invoice", "credit note", "billing document" |
+| `inventory-tracker` | Stock levels, increment/decrement, low-stock report | "stock", "inventory", "sold out" |
+| `discount-engine` | Discount codes: create, validate, calculate, usage | "coupon", "promo code", "discount" |
+| `pricing-rules` | Tiered/volume pricing per product | "bulk pricing", "customer tiers" |
+| `multi-currency` | Exchange rates and price conversion | "sell in dollars too", "currency switcher" |
+| `loyalty` | Points config, per-product points, balances | "loyalty points", "rewards", "savings card" |
+| `wishlist` | Per-visitor wishlist | "save for later", "favourites" |
+| `abandoned-cart` | Detect abandoned carts + send recovery mail | "people leave without buying" |
+| `ecommerce-analytics` | Revenue, top products, funnel, AOV, customer stats | "how is the shop doing", "best sellers" |
+| `shipping-rates` | Own shipping rates and rate tables | "shipping costs", "delivery fees" |
+| `myparcel` | Labels, shipments and tracking via MyParcel | "print a shipping label", "track the parcel" |
+| `order_events` | Event subscriptions on the order lifecycle (webhooks, chained actions) | "email the invoice automatically when paid" |
+| `calendar` | Calendars, events, bookable resources (chair/table/room), availability, slots, bookings — 15 endpoints, see "Calendar & Booking" | "appointments", "reservations", "book a table", "hotel rooms", "availability" |
+
+*Email & messaging*
+
+| Service | What it does | Reach for it when the user says… |
+|---|---|---|
+| `email_archive` | **The user's own archived mail** — search, read, threads, attachments, drafts, contexts | "my inbox", "email", "newsletters", "what did X send me", "past correspondence", "did I reply to…" |
+| `resend` | Transactional email (contact forms, notifications) | "send an email when someone submits" |
+| `email-templates` | Named templates: render-and-send, preview, manage | "same layout for every mail" |
+| `email_layout` | Branded email layout/wrapper for the project | "our house style in emails" |
+| `email_account` | Real mailboxes on a custom domain (users, aliases, domains) | "info@mydomain.com", "give me an email address" |
+| `linkedin` | Post text/images to a LinkedIn organisation page | "post this to LinkedIn" |
+
+*Members, auth & access*
+
+| Service | What it does | Reach for it when the user says… |
+|---|---|---|
+| `admin_auth` | Password-protected admin areas (login, reset, sessions) | "admin panel behind a login" |
+| `tenant_auth` | Provisioned/paid member portal (codes, sessions, refresh) | "member area", "customer portal", "subscribers only" |
+| `account` | Signed-in member reads/updates their own record | "my account page", "profile page" |
+| `member-provisioning` | Map offers/purchases to member access, event log, simulation | "buying the course gives access" |
+| `gated-files` | Private file delivery to members | "paid PDF", "downloads for members only" |
+| `file-downloads` | Signed download tokens with stats and revocation | "expiring download link" |
+| `identity` | Change the key email on an identity | "customer changed their email address" |
+| `auth_keys` | Request a project API key (human-approved, vault-stored) | AI needs a key without seeing it |
+
+*Data, documents & flows*
+
+| Service | What it does | Reach for it when the user says… |
+|---|---|---|
+| `data-import` | File → schema mapping → validate → dry-run → import | "import this CSV/Excel", "migrate my data" |
+| `xlsx-export` | Generate an Excel export | "export to Excel", "download as spreadsheet" |
+| `pdf_document` | Branded PDF from blocks (`generate`) or your own HTML template (`render-template`) | "PDF", "printable invoice", "downloadable brochure" |
+| `pdf_layout` | Reusable PDF layout config (can copy from the email layout) | "same header on every PDF" |
+| `flow_framework` | Definition + instance state machines for multi-step processes | "multi-step application", "approval workflow" |
+| `leads` | Store and retrieve form submissions as leads | "collect leads", "who filled in the form" |
+| `lead-scoring` | Score leads, single or batch | "which leads are worth calling" |
+| `comment-system` | Comments with moderation | "let visitors comment" |
+| `review-system` | Product reviews + ratings with moderation | "star ratings", "customer reviews" |
+| `prediction_game` | Prediction/pool games: participants, outcomes, scores | "pool", "prediction competition" |
+| `oura_sync` / `strava_sync` / `oura` / `strava` | Sync personal health/activity data into the project | "pull in my Oura/Strava data" |
+| `offline_sync` | Ping/sync/pull for offline-capable clients | "keep working without internet" |
+| `api-proxy` | Register and proxy an external API through the platform | "call our own backend from the page" |
+| `anthropic` | Claude messages from inside the project (server-side) | "the site itself should use AI" |
+
+*Ops, debugging & platform*
+
+| Service | What it does | Reach for it when the user says… |
+|---|---|---|
+| `tracer` | Live request tracing for API + page requests | "it fails and I don't know why" |
+| `capability_requests` | Report a genuine platform gap — **last resort**, see "You Are the Builder" | nothing above fits and you verified it |
+
+**Task tracking (TAPI)** is not an integration but a first-class MCP tool: `tasks(operation: …)`.
+Reach for it when the user says "where were we", "continue the build", "what's left" — see
+"Task Tracking (TAPI)".
+
+**External services — available, need an API key via `setup_integration` first.**
+Roughly 50 more, addressed exactly the same way once configured:
+
+| Category | Services |
+|---|---|
+| Payments | `stripe`, `mollie`, `paypal` |
+| Email & marketing | `mailgun`, `sendgrid`, `smtp`, `brevo`, `mailchimp`, `convertkit` |
+| Messaging | `twilio`, `slack-webhook`, `discord-webhook`, `telegram` |
+| Shipping | `postnl`, `sendcloud`, `shopsunited` |
+| AI | `openai`, `gemini`, `mistral`, `groq`, `perplexity`, `replicate`, `elevenlabs`, `deepgram`, `stability`, `imagen` |
+| Media | `unsplash`, `pexels`, `cloudinary`, `imgur`, `giphy`, `youtube`, `vimeo` |
+| CRM & productivity | `hubspot`, `notion`, `linear`, `todoist`, `github`, `sentry` |
+| Data & database | `airtable`, `supabase`, `contentful`, `google-places`, `openweather`, `newsapi`, `overheid-io` |
+| Booking & health | `calcom`, `oura`, `strava` |
+| Social | `twitter` |
+
+> The two lists above describe what the platform ships. **`list_integrations(project_id)` remains
+> the source of truth** for what is actually reachable on this project right now — some
+> capabilities are account- or entitlement-scoped and only appear there. Check the tool, not
+> your memory of this table.
+
+#### Email Archive — searching the user's own mail
+
+This one deserves its own note because it is the capability models most often miss: when a user
+asks about **their own inbox, newsletters, senders or past correspondence**, that is not a job for
+web search or a third-party mail connector — the platform archives and indexes their mail itself.
+
+`search` is scoped to one archive, so `archive_id` is **required**. Always resolve it first:
+
+```
+1. execute_integration(service: "email_archive", endpoint: "list-archives", input: {})
+   → pick the archive (list-archives also accepts owner_email to filter)
+
+2. execute_integration(service: "email_archive", endpoint: "search", input: {
+       archive_id: 7,
+       query: "The Neuron",
+       mode: "hybrid",            // keyword (default) | semantic | hybrid (best recall)
+       date_from: "2026-08-28",
+       sort: "newest",
+       limit: 20
+   })
+   → metadata + snippets, no bodies
+
+3. execute_integration(service: "email_archive", endpoint: "get-message", input: {
+       archive_id: 7, id: 12345
+   })
+   → full body_plain for the messages that matter
+```
+
+Other endpoints: `get-thread` (whole conversation), `list-attachments` + download by index,
+`get-stats` (counts, date range, per-folder), `set-state` (mark handled/kept/todo),
+`draft-reply` (suggested reply text — never sends), and the context layer
+(`context-list`, `context-get`, `context-feed`, `context-match`, `context-members`) for
+LLM-ready rolling summaries of a topic.
+
+Two behaviours worth knowing before you report "nothing found":
+
+- Handled messages are **hidden by default** (a reply in Sent marks them handled) — pass
+  `include_done: true` to see everything.
+- Newsletters are frequently HTML-only, so `snippet` comes back `null` with
+  `snippet_source: null`. That means *no plain-text body*, **not** an empty result — fetch the
+  message with `get-message` instead of concluding there is nothing there.
 
 ### How integrations work
 
@@ -1830,6 +1974,11 @@ integrations only.
 | Upload images from admin panel (browser) | **Asset Proxy** (PAPI assets) or **SAPI upload** (form uploads) |
 | Request a project API key securely | Auth Keys (human-approved, vault-stored) |
 | Debug failing requests or slow pages | Request Tracer |
+| Search their own inbox / newsletters / past mail | `email_archive` — `list-archives` then `search` |
+| Summarise what a sender or newsletter covered recently | `email_archive` — `search` (mode `hybrid`) then `get-message` |
+| Draft a reply to a mail they received | `email_archive` — `draft-reply` (returns text, never sends) |
+| Real mailboxes on their own domain | `email_account` |
+| Remember where a multi-session build stands | `tasks` (TAPI) |
 
 > **Quote / offerte checkout (no online payment).** To let visitors request a full quote through the normal cart → checkout flow instead of paying, use the checkout-flow **invoice provider**: `initiate-checkout` → `set-customer` → `create-payment` with **`provider: "invoice"`** → `complete-checkout`. No payment is created ("op factuur"); the resulting order is created with status `pending` / `payment_status: unpaid`, and the confirmation email still fires. That order *is* the quote request (products, quantities, customer details). **Requires the project setting `allow_invoice_checkout`.** Combine with hidden prices (`price_cents: 0`) for a pure request-a-quote shop: the cart shows products + quantities only, the order total is €0, and you follow up with a real quote. Full cart/checkout wiring lives in the e-commerce cookbook.
 
@@ -2762,7 +2911,8 @@ const r = await fetch(`${SAPI}/execute/gated-files/download`, {
   body: JSON.stringify({ file_id: 42, _csrf: CSRF })
 });
 const j = await r.json();
-const data = j.result || j;            // { url, expires_in, delivery, filename }
+if (!j.success) { console.warn(j.error, j.upstream_status); return; }  // see Shared Member Content
+const data = j.result;                 // { url, expires_in, delivery, filename }
 
 // 3. Fetch the file within expires_in (seconds) — the URL is short-lived
 if (data.url) window.location.href = data.url;
@@ -2851,7 +3001,8 @@ const r = await fetch(`${SAPI}/execute/account/get-me`, {
   body: JSON.stringify({ _csrf: CSRF })
 });
 const j = await r.json();
-const data = j.result || j;   // { verified: true, email, me: {...}, orders: [...] }
+if (!j.success) { console.warn(j.error, j.upstream_status); return; }  // see Shared Member Content
+const data = j.result;   // { verified: true, email, me: {...}, orders: [...] }
 ```
 
 Without a verified session the call returns **401 `"A verified visitor session is
@@ -2879,11 +3030,11 @@ It reads a MAPI entity under the identity the session already established, and t
 `policy_json` decides which rows come back and which fields are stripped. The browser never
 sends an identity, so there is nothing to tamper with.
 
-> **New (September 2026).** The bridge is deployed and the governed-entity refusal, the
-> input guards and the read path are verified. The **tenant row-scoping itself has been
-> proven at the policy layer but not yet end-to-end through a live member session.** Until
-> you have seen it work with two real accounts, treat a `records` page as unverified: check
-> it from an actual member login before you tell anyone their content is private.
+> **New (September 2026).** Verified end-to-end on 1 September 2026: two members of the
+> same tenant read the same rows, a member of another tenant sees none, a cross-tenant
+> record returns 403, and hidden fields stay out of the response. It is new, so treat the
+> first page you build on it as you would any new feature — check it from a real member
+> login before you tell anyone their content is private.
 
 ### Requirements
 
@@ -2940,10 +3091,24 @@ const r = await fetch(`${SAPI}/execute/records/list`, {
   })
 });
 const j = await r.json();
-const data = j.result || j;   // { entity, data: [...], pagination: {...} }
+if (!j.success) {
+  // A denied read arrives as HTTP 200 with success:false — see below.
+  console.warn(j.error, j.upstream_status);
+  return;
+}
+const data = j.result;   // { entity, data: [...], pagination: {...} }
 ```
 
 `records/get` takes `{ entity, id }` and returns a single record.
+
+> **Check `j.success`, not the HTTP status.** The SAPI execute route only returns a real
+> HTTP error for things it rejects itself — no session, missing CSRF (401/403). Anything
+> the integration refuses (403 not your row, 404 unknown or ungoverned entity, 422 a
+> blocked filter) comes back as **HTTP 200** with `success: false`, an `error` string and
+> an `upstream_status`. Code that branches on `res.ok` or `res.status` treats a permission
+> denial as a success and renders an empty page with no explanation — the worst possible
+> outcome for a member area, because it looks like "no content" rather than "access
+> denied". This applies to every `/execute/` call, `gated-files` and `account` included.
 
 ### What the guards refuse, and why
 
@@ -3045,15 +3210,16 @@ or repeated. Each task has a slug, status, and history — visible across sessio
 
 **Create tasks for each build phase:**
 ```
-create_task(slug: "homepage-build", title: "Build homepage with hero + features")
-create_task(slug: "shop-pages", title: "Shop overview + product detail pages")
-create_task(slug: "contact-form", title: "Contact form with Resend email")
-create_task(slug: "admin-dashboard", title: "Admin panel with auth + CRUD")
+tasks(operation: "create", slug: "homepage-build", title: "Build homepage with hero + features")
+tasks(operation: "create", slug: "shop-pages", title: "Shop overview + product detail pages")
+tasks(operation: "create", slug: "contact-form", title: "Contact form with Resend email")
+tasks(operation: "create", slug: "admin-dashboard", title: "Admin panel with auth + CRUD")
 ```
 
 **Update progress as you work:**
 ```
-add_task_history(
+tasks(
+  operation: "add_history",
   slug: "homepage-build",
   type: "progress",
   status: "done",
@@ -3064,9 +3230,13 @@ add_task_history(
 
 **Start of next session — check what's done and what's next:**
 ```
-list_tasks(status: "in_progress")   # What's being worked on
-list_tasks(status: "open")          # What hasn't started yet
+tasks(operation: "list", status: "in_progress")   # What's being worked on
+tasks(operation: "list", status: "open")          # What hasn't started yet
 ```
+
+> One tool, many operations: `list`, `get`, `history`, `create`, `add_history`, `update`,
+> `delete`, `search`, `export`. The old separate names (`create_task`, `list_tasks`,
+> `add_task_history`, …) still dispatch but are **legacy** — always use `tasks`.
 
 This gives every AI session — regardless of platform — a shared understanding of
 where the project stands. The user doesn't have to re-explain what was already built.
@@ -3132,6 +3302,17 @@ POST   /iapi/project/{id}/tracer/start                Start debug trace session
 POST   /iapi/project/{id}/tracer/logs                 Read trace entries
 POST   /iapi/project/{id}/pdf_document/generate       Branded PDF from content blocks
 POST   /iapi/project/{id}/pdf_document/render-template  Own HTML template (PAPI asset) → PDF; data = root context; store:false → base64
+
+# Email Archive (service: "email_archive" — the user's own archived mail):
+POST   /iapi/project/{id}/email_archive/list-archives    Archives + source counts (resolve archive_id FIRST)
+POST   /iapi/project/{id}/email_archive/search           Keyword/semantic/hybrid search; archive_id required
+POST   /iapi/project/{id}/email_archive/get-message      One message incl. body_plain
+POST   /iapi/project/{id}/email_archive/get-thread       Whole thread, chronological (metadata only)
+POST   /iapi/project/{id}/email_archive/list-attachments Attachments of one message (index, name, size)
+POST   /iapi/project/{id}/email_archive/get-stats        Counts, size, date range, per-folder
+POST   /iapi/project/{id}/email_archive/set-state        Mark handled / kept / todo
+POST   /iapi/project/{id}/email_archive/draft-reply      Suggested reply text (never sends)
+POST   /iapi/project/{id}/email_archive/context-feed     LLM-ready rolling summary + recent messages
 
 # Calendar & Booking (service: "calendar" — 15 endpoints, all datetimes UTC):
 POST   /iapi/project/{id}/calendar/upsert-calendar    Create/update a calendar (timezone for rendering)
