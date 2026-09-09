@@ -16,7 +16,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.14.0"
+   version: "3.16.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1529,36 +1529,22 @@ Uploads are stored as project assets on the CDN -- no bearer token needed.
 **Flow:** upload file(s) first -> collect CDN URLs -> include in form submit fields.
 
 ```javascript
-// Upload a file using the CDN library
 var sapi = WP.sapi(PROJECT_ID);
 
-async function uploadFile(file) {
-   // getSession() handles caching + resume automatically
-   var session = await sapi.getSession();
+async function uploadFile(file, onProgress) {
+   // The library owns the session, the CSRF token and the multipart boundary,
+   // picks up the replacement token this route hands back, and retries once if
+   // the session died server-side. Do not rebuild any of that by hand.
+   var res = await sapi.uploadFile('intake', file, onProgress);
 
-   var form = new FormData();
-   form.append('file', file);
-   form.append('_csrf', session.csrf_token);
-   form.append('form_name', 'intake');
-
-   var res = await fetch(
-           '/sapi/project/' + PROJECT_ID + '/form/upload',
-           {
-              method: 'POST',
-              headers: { 'X-Session-Id': session.session_id },
-              body: form   // no Content-Type header -- browser sets multipart boundary
-           }
-   );
-
-   var data = await res.json();
-   if (data.success) {
-      // Clear stored CSRF -- the library will fetch a fresh one on next call
-      sapi.clearSession();
-      return data.data.asset_url;   // CDN URL ready for use
+   if (res.ok) {
+      return res.data.data.asset_url;   // CDN URL ready for use
    }
-   throw new Error(data.error && data.error.message || 'Upload failed');
+   throw new Error((res.data.error && res.data.error.message) || 'Upload failed');
 }
 ```
+
+`onProgress(percent, loaded, total)` is optional — pass it to drive a progress bar.
 
 **Upload rules:**
 
@@ -2359,21 +2345,104 @@ function logout() {
 }
 ```
 
-### Creating Admin Users
+### Creating Admin Users — the bootstrap order
 
-Admin users are created via the Admin Auth integration:
+There is no dashboard screen for creating Admin Auth users. The first admin is created
+through the API, and the customer's own password never has to pass through you, through
+the platform owner, or through any chat session.
+
+The four steps only work in this order:
+
+```
+create_user  (random throwaway password)
+  → request-reset      (requires NO login)
+    → reset-password   (the user sets their own password)
+      → login
+```
+
+**Step 1 — create the account with a throwaway password.**
 
 ```
 execute_integration(
   project_id: 12345,
   service: "admin_auth",
   endpoint: "create_user",
-  input: { email: "admin@example.com", password: "securepassword" }
+  input: { email: "admin@example.com", password: "<40 random characters>" }
 )
 ```
 
-The `create_user` endpoint accepts only `email` and `password` — no name field.
-The email serves as the unique identifier and login credential.
+Generate the password randomly, never show it to the user, and never store it. It exists
+only so the account row exists. `create_user` accepts only `email` and `password` — no
+name field. The email is the unique identifier and the login credential.
+
+**Step 2 — the user requests a reset link.** `request-reset` needs no session and no
+token. That is what makes the bootstrap self-service.
+
+```
+POST /iapi/project/{id}/admin-auth/request-reset
+{ "email": "admin@example.com" }
+```
+
+**`request-reset` only works for an existing, active user.** An unknown address returns
+`{"success": true}` and sends nothing — that is the enumeration guard, not a failure.
+Reset alone therefore does not solve the bootstrap; `create_user` + reset together do.
+
+**Step 3 — the user sets their own password.**
+
+```
+POST /iapi/project/{id}/admin-auth/reset-password
+{ "token": "rst_...", "password": "...", "password_confirmation": "..." }
+```
+
+`password_confirmation` is required. Minimum 8 characters. The token is single-use and
+expires 60 minutes after it was requested. A successful reset invalidates all active
+sessions for that user.
+
+**Step 4 — login**, as described in the canonical path table below.
+
+#### You must build two pages — they do not exist by default
+
+This is the step that gets missed, and it is the reason the flow appears to be missing
+from the platform. Creating the user is not enough: without these two pages there is no
+screen to start from.
+
+| Page | Does | Link from |
+|------|------|-----------|
+| `forgot-password.html` | email field → `POST .../admin-auth/request-reset` | `login.html` |
+| `reset-password.html` | reads `token` from the query string → `POST .../admin-auth/reset-password` | the emailed link |
+
+Three rules for those pages:
+
+1. **Both pages must be publicly reachable.** No visitor session, no OTP gate, no auth
+   check. The `rst_` token is the proof of identity. If you put the reset page behind the
+   site's own login, the user needs a password to set their password.
+2. **Hard-code the project ID in `reset-password.html`.** The emailed URL is
+   `{base}/reset-password.html?token=rst_xxx&project={website_id}` — that parameter is the
+   *website* ID, while the IAPI route runs on the *dashproject* ID. Reading it from the
+   query string produces a page that posts to the wrong project and fails silently, at the
+   exact moment the user believes they are done. Ignore the parameter, use the project
+   number you built the site with.
+3. **Keep the confirmation generic.** Say "if an account exists for this address, a link is
+   on its way" — never "unknown address". That preserves the enumeration guard.
+
+Set `noindex,nofollow` on both.
+
+#### Delivery
+
+The reset mail goes out over the AuthMailer cascade: custom SMTP → the project's own
+Resend key → the platform. A project with no mail provider configured still receives the
+mail, sent from a platform address. Configuring Resend is not a prerequisite — do not tell
+a customer it is.
+
+#### There is no change-password endpoint
+
+A signed-in admin cannot change their own password. The browser endpoints are `login`,
+`verify`, `logout`, `refresh`, `request-reset` and `reset-password`. The reset flow is also
+the route for a voluntary password change — it is the design, not a workaround.
+
+`update_password` does exist, but it is an MCP tool: it is admin-side, it means someone
+other than the user chooses the password, and it invalidates all that user's sessions. Use
+it only as a last resort, never as the normal path.
 
 ### Decision Tree — Which Auth System?
 
@@ -2415,6 +2484,8 @@ and validates `wsa_` Bearer tokens.
 - ❌ Reading the token from `r.data.token` after a SAPI execute call — wrong envelope shape
 - ❌ `<body style="visibility:hidden">` while running an async auth check — see Page Rendering above
 - ❌ URL with underscore for login/verify/logout: `/iapi/project/{id}/admin_auth/login` — those specific routes are `admin-auth` (hyphen)
+- ❌ Pointing the user at the WebsitePublisher dashboard to create or set an admin password — **that screen does not exist**. Admin users are created via `create_user`; passwords are set by the user through `request-reset` → `reset-password`
+- ❌ Building a login page without a link to `forgot-password.html` — the first admin then has no way to set a password, and the account is unreachable
 
 The IAPI route is fully self-contained: no session, no CSRF, just `Authorization: Bearer`
 on the request. If you find yourself adding session bootstrap or CSRF token logic to an
@@ -2501,27 +2572,11 @@ function getAdminToken() {
 
 // Image upload — uses SAPI (no admin token needed)
 async function uploadImage(file) {
-  var session = await sapi.getSession();
-  var form = new FormData();
-  form.append('file', file);
-  form.append('_csrf', session.csrf_token);
-  form.append('form_name', 'admin_upload');
-
-  var res = await fetch(
-    '/sapi/project/' + PROJECT_ID + '/form/upload',
-    {
-      method: 'POST',
-      headers: { 'X-Session-Id': session.session_id },
-      body: form
-    }
-  );
-
-  var data = await res.json();
-  if (data.success) {
-    sapi.clearSession();  // CSRF is single-use
-    return data.data.asset_url;  // CDN URL: cdn.websitepublisher.ai/custom/wid.../images/...
+  var res = await sapi.uploadFile('admin_upload', file);
+  if (res.ok) {
+    return res.data.data.asset_url;  // CDN URL: cdn.websitepublisher.ai/custom/wid.../images/...
   }
-  throw new Error(data.error?.message || 'Upload failed');
+  throw new Error(res.data.error?.message || 'Upload failed');
 }
 
 // Save data with image URL — uses admin auth (wsa_ token)
