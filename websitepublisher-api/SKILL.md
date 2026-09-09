@@ -16,7 +16,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.16.0"
+   version: "3.17.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -923,6 +923,7 @@ The data is embedded directly in the HTML — no JavaScript needed, fully indexa
   offset="0"                  Optional: skip N records
   filter="category:shoes"     Optional: field:value pairs, ; separated
   wrap="div"                  Optional: wrapper element (default: div)
+                              Inside a <table>: MUST be wrap="tbody" — see below
   wrap-class="product-grid"   Optional: CSS class on wrapper
 -->
 ```
@@ -1235,6 +1236,33 @@ around the loop then has only **one** child → one column. Fix:
 ```css
 [data-mapi-ssr] { display: contents; }
 ```
+
+**Table gotcha (`wrap="tbody"` is mandatory inside a `<table>`).** The default
+wrapper is a `<div>`, which is not valid inside a table. The browser hoists it out
+of the table, the rows land outside their parent, and DOMPDF aborts the render with:
+
+```
+Min/max width is undefined for table rows
+```
+
+That message names neither the table nor `wps-mapi`, so it is easy to spend an hour
+in the wrong place. Always set the wrapper explicitly:
+
+```html
+<table>
+  <thead><tr><th>Product</th><th>Stock</th></tr></thead>
+  <!--#wps-mapi entity="products" sort="name:asc" wrap="tbody" -->
+    <tr><td>{{name}}</td><td>{{stock}}</td></tr>
+  <!--#wps-mapi-empty -->
+    <tr><td colspan="2">No products.</td></tr>
+  <!--#/wps-mapi -->
+</table>
+```
+
+**These tags are HTML comments, not elements.** Writing `<wps-mapi entity="…">` as an
+element silently fails to match: the block is never processed, the `{{placeholders}}`
+stay in the output as literal text, and inside a table you land on the DOMPDF error
+above. The opening tag is `<!--#wps-mapi … -->`, the closing tag is `<!--#/wps-mapi -->`.
 
 #### Complete Examples
 
