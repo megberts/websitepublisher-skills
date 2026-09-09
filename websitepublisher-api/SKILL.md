@@ -16,7 +16,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.17.0"
+   version: "3.18.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1072,7 +1072,7 @@ Render one specific record by ID or field match:
 <!--#/wps-mapi -->
 ```
 
-**URL-based slug matching** (live — via `_template.html` wildcard routing):
+**URL-based slug matching** (a routed page — see below for how to create one):
 ```html
 <!--#wps-mapi entity="products" record=":slug" match="slug" -->
 <h1>{{name}}</h1>
@@ -1081,16 +1081,62 @@ Render one specific record by ID or field match:
 <p>Product not found.</p>
 <!--#/wps-mapi -->
 ```
-When a visitor opens `/products/wireless-headphones`, the Optimizer serves
-`/products/_template.html` and resolves `:slug` to `wireless-headphones` for the
-MAPI lookup. A non-existent slug falls into the `-empty` branch (serve a 404
-status or a redirect there). `record=":slug"` always takes the **last URL
-segment** as the match value.
+When a visitor opens `/product/wireless-headphones`, the router recognises the
+page at `/product` as routed, takes `wireless-headphones` as the route segment,
+and resolves it against the entity. `record=":slug"` always takes the **last URL
+segment** as the match value. An unknown slug falls into the `-empty` branch —
+unless `route_mandatory` is on, in which case the platform serves a real 404
+before your template runs.
 
-> **⚠️ How a routed template is stored — and how to update it later.** You create the template with `create_page(slug: "products/_template.html")`, but the platform stores it as a page whose **slug is the clean route**: `uri` = `/products`, with the template file kept separately as `customfile` = `products/_template.html`. Consequences:
-> - **Get / update / patch it by the clean route, with a leading slash:** `get_page(slug: "/products")`, `patch_page(slug: "/products", …)`, `update_page(slug: "/products", …)`. Passing `products/_template.html` — or even `products` without the leading slash — returns **404 Page not found**.
-> - `get_page("/products")` returns the routing config (`routing: { enabled, source, entity, match }`) plus the current `version_hash` for optimistic updates.
-> - **Re-running `create_page` with the original `_template.html` slug is an upsert** — it overwrites the existing template. Handy when you just want to replace the whole file and don't have the version hash.
+#### Creating a routed page
+
+A page becomes routed through the **`route_*` parameters on `create_page` /
+`update_page`**. There is no magic filename — the page slug you choose *is* the
+route prefix.
+
+```
+create_page(
+  project_id: 12345,
+  slug: "product",              // → serves /product/{record}
+  content: "<!DOCTYPE html>…",
+  route_entity: "products",     // the only one you really need
+  route_source: "catalog",      // "catalog" or "mapi"; omit to auto-detect
+  route_mandatory: true         // 404 on unknown records and on the bare URL
+)
+```
+
+| Parameter | Meaning |
+|---|---|
+| `route_entity` | Entity to resolve one record from. Setting it turns the route **on**; sending an empty string on `update_page` turns it **off**. |
+| `route_source` | `"mapi"` for your own entities, `"catalog"` for the built-in webshop. Omit to auto-detect — but catalog wins for the reserved names `products` and `categories`, so set it explicitly if your own MAPI entity has one of those names. |
+| `route_match` | Record field the URL segment matches. Defaults to `slug`. |
+| `route_mandatory` | See the trade-off below. Defaults to `false`. |
+
+> **⚠️ Name the page after the route, not after the template.**
+> `slug: "product"` gives you `/product/{record}`. A slug like
+> `products/_template.html` creates an ordinary page that literally lives at
+> `/products/_template.html` — the router never looks at it and no route is set.
+> Use a clean slug: no underscore prefix, no `.html`, no `/`.
+
+> **⚠️ `route_mandatory` decides how unknown URLs behave — and it is an SEO
+> decision, not a detail.**
+> - `true` → both the bare `/product` and an unknown record return a real **404**.
+>   This is what you want for detail pages.
+> - `false` → both render the page with the `-empty` branch and status **200**.
+>   That lets one page serve an index *and* its detail URLs, but every typo and
+>   every deleted record then becomes a soft-404. Only choose `false` when the
+>   set of slugs is small and stable (a handful of categories), never when the
+>   slugs come from generated or user content.
+
+**Reading and updating a routed page.** Use the slug you created it with:
+`get_page(slug: "product")`, `patch_page(slug: "product", …)`. `get_page`
+returns the current `routing` block (`enabled`, `mandatory`, `source`, `entity`,
+`match`) alongside `version_hash`.
+
+**Routing changes are not versioned.** Sending only `route_*` parameters updates
+the route but leaves `version` and `version_hash` untouched — nothing about the
+content changed. Consequence: `rollback_page` restores content, never a routing
+configuration. Write the route down if it matters.
 
 #### Dynamic Routed Pages (detail + related list)
 
@@ -1131,7 +1177,8 @@ branches driven by routing (`source`, `entity`, `match="slug"` on the page):
 ```
 
 With `record=":slug"` the last URL segment is the match value:
-`/products` → slug `products` (not found → empty branch = overview),
+`/products` → no route segment at all, so nothing resolves → empty branch = overview
+(this needs `route_mandatory: false`; with `true` the bare URL is a 404),
 `/products/kliklijsten` → slug `kliklijsten` (match branch).
 
 #### Dynamic Filter Tokens
@@ -1170,7 +1217,7 @@ A field that only exists nested (e.g. `category.slug`) is not filterable.
 
 #### Per-Record SEO — `<!--#wps-seo -->` (routed detail pages)
 
-On a **routed detail page** (`_template.html` / `record=":slug"`), every record would
+On a **routed detail page** (`route_entity` set / `record=":slug"`), every record would
 otherwise share the same page-level `<title>` and description — a go-live SEO blocker
 (duplicate titles). The `<!--#wps-seo -->` tag injects per-record SEO **server-side**
 into the `<head>`: `<title>`, meta description, Open Graph, and JSON-LD — before any
@@ -1193,6 +1240,13 @@ crawler sees the page, no JavaScript involved. One tag per page. Works for both
 (the tag is self-describing — it does not inherit route context). `record` accepts
 `:slug` (last URL segment), `:N` (N-th segment), or a literal value.
 `title` and `description` go **as attributes** and may contain template tokens.
+
+> **⚠️ Always write `match=` explicitly on `wps-seo`.** Unlike the route and the
+> body SSR block, which default to `slug`, this tag defaults to **`id`**. On a
+> slug-routed page, omitting `match="slug"` makes the lookup miss, the block is
+> dropped silently, and the page falls back to page-level SEO — no error, no log
+> line. Every record then shares one title, which is exactly the duplicate-title
+> problem this tag exists to solve.
 
 **Critical rule — title/description are ATTRIBUTES, never elements.** Do not put a
 `<title>` or description `<meta>` element inside the block: the platform strips the
