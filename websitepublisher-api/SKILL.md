@@ -16,7 +16,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.18.0"
+   version: "3.19.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1084,9 +1084,9 @@ Render one specific record by ID or field match:
 When a visitor opens `/product/wireless-headphones`, the router recognises the
 page at `/product` as routed, takes `wireless-headphones` as the route segment,
 and resolves it against the entity. `record=":slug"` always takes the **last URL
-segment** as the match value. An unknown slug falls into the `-empty` branch —
-unless `route_mandatory` is on, in which case the platform serves a real 404
-before your template runs.
+segment** as the match value. An unknown slug returns a real **404** on a
+`mapi`-routed page; on a `catalog` route it still falls into the `-empty`
+branch (see `route_mandatory` below).
 
 #### Creating a routed page
 
@@ -1118,15 +1118,20 @@ create_page(
 > `/products/_template.html` — the router never looks at it and no route is set.
 > Use a clean slug: no underscore prefix, no `.html`, no `/`.
 
-> **⚠️ `route_mandatory` decides how unknown URLs behave — and it is an SEO
-> decision, not a detail.**
-> - `true` → both the bare `/product` and an unknown record return a real **404**.
->   This is what you want for detail pages.
-> - `false` → both render the page with the `-empty` branch and status **200**.
->   That lets one page serve an index *and* its detail URLs, but every typo and
->   every deleted record then becomes a soft-404. Only choose `false` when the
->   set of slugs is small and stable (a handful of categories), never when the
->   slugs come from generated or user content.
+> **⚠️ `route_mandatory` no longer decides whether an unknown record 404s.**
+> Since the routing change of 2026-09-09, a URL segment that resolves to nothing
+> **always** returns a real 404 when `route_source` is `mapi` — regardless of this
+> flag. What is left for `route_mandatory` is narrower and simpler:
+> - `true` → the bare `/product` (no segment at all) is **404**. Use this for pure
+>   detail pages that have no index of their own.
+> - `false` → the bare `/blog` renders the page with the `-empty` branch. That lets
+>   **one** page serve both an index and its detail URLs, which is the pattern you
+>   usually want: `/blog` lists, `/blog/{slug}` reads, unknown slugs 404.
+>
+> For `route_source: "catalog"` the old behaviour still applies — an unknown segment
+> falls into the `-empty` branch with a 200. That is a soft-404: the page returns
+> "found" for a URL that has no content of its own. Give the empty branch something
+> honest to say, and prefer `mapi` for anything with generated slugs.
 
 **Reading and updating a routed page.** Use the slug you created it with:
 `get_page(slug: "product")`, `patch_page(slug: "product", …)`. `get_page`
@@ -1290,6 +1295,26 @@ around the loop then has only **one** child → one column. Fix:
 ```css
 [data-mapi-ssr] { display: contents; }
 ```
+
+That works anywhere. When the grid is yours to define, `wrap-class` is cleaner —
+the SSR wrapper *becomes* the grid, so there is no extra element and no CSS rule:
+
+```html
+<div class="page-wrap">
+  <!--#wps-mapi entity="blogpost" filter="status:published" wrap-class="card-grid" -->
+    <a class="card" href="/blog/{{slug}}">{{title}}</a>
+  <!--#wps-mapi-empty -->
+    <p>Nothing published yet.</p>
+  <!--#/wps-mapi -->
+</div>
+```
+
+Note the empty branch is **not** wrapped, so it never inherits `card-grid`.
+
+> **⚠️ You will not see this bug with one record.** A broken grid holding a single
+> card looks identical to a working one. It only reveals itself when the second
+> record arrives — often days later, on a page you thought was finished. Test
+> grid layouts with at least two records.
 
 **Table gotcha (`wrap="tbody"` is mandatory inside a `<table>`).** The default
 wrapper is a `<div>`, which is not valid inside a table. The browser hoists it out
