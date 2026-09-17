@@ -16,7 +16,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.19.0"
+   version: "3.20.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -128,8 +128,8 @@ existing toolset already covers.
    `get_integration_schema(project_id, service)` returns the exact input fields for an
    endpoint; `list_assets(project_id)` shows every existing file. These are the ground
    truth — query them before assuming a capability, endpoint, or asset is missing. Then
-   cross-check the **Asset Proxy**, **Admin-Only IAPI Calls**, and **API Quick Reference**
-   sections of this skill.
+   cross-check the `guidance` block that `get_integration_schema` returns (e.g. for
+   `asset_proxy` and `admin_auth`) and the **API Quick Reference** section of this skill.
 3. **Never invent or guess endpoints.** The IAPI route is always
    `/project/{id}/{service}/{endpoint}` — match the host and shape the project already
    uses (check an existing working call or the project's admin/WSA bridge; some setups
@@ -463,8 +463,6 @@ All changes invalidate the page cache automatically.
 - A fragment is a complete HTML block — it does not include `<!DOCTYPE>`, `<html>`, or `<head>`
 - List existing fragments + their versions: `fragments(operation: "list", project_id: 12345)`
 - Never copy-paste the same header/footer HTML into multiple pages
-- The old tool names (`create_fragment`, `update_fragment`, `list_fragments`,
-  `delete_fragment`) still dispatch but are **deprecated** — always use `fragments`
 
 ### Building Pages
 
@@ -1629,9 +1627,9 @@ The library handles sessions, CSRF tokens, stale session recovery, and all heade
 Forms can accept image uploads from visitors via the SAPI upload endpoint.
 Uploads are stored as project assets on the CDN -- no bearer token needed.
 
-> **Building an admin panel with image upload?** See "Image Upload in Admin Panels"
-> under the Admin-Protected Pages section — it shows how to combine admin auth
-> with SAPI upload on the same page.
+> **Building an admin panel with image upload?** Call
+> `get_integration_schema(service: "asset_proxy")` — its `guidance` block shows how to combine
+> admin auth with Asset Proxy or SAPI upload on the same page.
 
 **Flow:** upload file(s) first -> collect CDN URLs -> include in form submit fields.
 
@@ -1739,7 +1737,7 @@ final gate — never skip it, even for a quick demo that the user intends to kee
       site collects personal data (forms, auth, leads).
 
 If any item fails, fix it before declaring the site live. Log the outcome of this
-review in TAPI (`add_task_history`) so the security gate is traceable per project.
+review in TAPI (`tasks(operation: "add_history")`) so the security gate is traceable per project.
 
 ---
 
@@ -2334,11 +2332,6 @@ the base64 and check the PDF **and** `blocked_assets`. 3. Iterate via `patch_ass
 
 ## Admin-Protected Pages — IAPI Admin Auth
 
-> **⚠️ Need to upload images from an admin panel?** Do NOT use `upload_asset`,
-> vault keys, or MAPI asset routes from the browser. Use **Asset Proxy**
-> (`/iapi/project/{id}/asset-proxy/upload` with your `wsa_` admin token) — it's
-> the simplest option. See "Image Upload in Admin Panels" below.
-
 When building dashboards, admin panels, or any page that requires a logged-in admin
 (not a public visitor), use the IAPI Admin Auth pattern. This is separate from
 SAPI Visitor Auth — they serve different purposes.
@@ -2351,205 +2344,14 @@ SAPI Visitor Auth — they serve different purposes.
 | **API calls** | Direct `fetch()` to `/iapi/project/{id}/...` with `Authorization: Bearer` | `WP.sapi(id).call(...)` via CDN library |
 | **Token prefix** | `wsa_` (server-side) | Session ID (no token exposed to page) |
 
-### Admin Login
+How to build it — bootstrap order, the pages you must build (login, forgot-password,
+reset-password), login/guard/logout code and anti-patterns — comes from
+`get_integration_schema(service: "admin_auth")` in the `guidance` block. Image upload from
+an admin panel: `get_integration_schema(service: "asset_proxy")`. A server-side key without
+seeing the token: `get_integration_schema(service: "auth_keys")`.
 
-```javascript
-const PROJECT_ID = 12345; // replace with actual project ID
-
-async function login(email, password) {
-   const r = await fetch(`/iapi/project/${PROJECT_ID}/admin-auth/login`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({email, password})
-   });
-   const data = await r.json();
-   if (data.success && data.token) {
-      sessionStorage.setItem('admin_token', data.token);
-      localStorage.setItem('admin_token', data.token);
-      document.cookie = `admin_token=${data.token}; path=/; max-age=28800; SameSite=Lax`;
-   }
-   return data;
-}
-```
-
-Triple storage (sessionStorage + localStorage + cookie) ensures the token survives
-page navigations, tab reopens, and server-side middleware checks.
-
-After login, redirect to **`/`** if your dashboard page is set as `landingpage: true`.
-See the note about `landingpage` under Page Metadata.
-
-### Admin-Only IAPI Calls
-
-```javascript
-async function callAdmin(service, endpoint, payload) {
-   const token = sessionStorage.getItem('admin_token');
-   if (!token) { window.location.replace('/login'); return; }
-
-   const r = await fetch(`/iapi/project/${PROJECT_ID}/${service}/${endpoint}`, {
-      method: 'POST',
-      headers: {
-         'Content-Type': 'application/json',
-         'Authorization': 'Bearer ' + token
-      },
-      body: JSON.stringify(payload)
-   });
-
-   if (r.status === 401) {
-      sessionStorage.removeItem('admin_token');
-      localStorage.removeItem('admin_token');
-      window.location.replace('/login');
-      return;
-   }
-   return r.json();
-}
-
-// Usage:
-const leads = await callAdmin('leads', 'get-leads', { page: 1, per_page: 25 });
-const msg   = await callAdmin('anthropic', 'create-message', { prompt: '...' });
-```
-
-**Important:** Use direct `fetch()` — not `WP.sapi().call()`. The SAPI client library
-is for visitor sessions. Admin calls use `Authorization: Bearer` headers on `/iapi/` routes.
-
-### Page Rendering — Auth Guard
-
-```html
-<body>
-<script>
-   // Immediate redirect — no hidden body, no async check
-   var token = sessionStorage.getItem('admin_token')
-           || localStorage.getItem('admin_token');
-   if (!token) window.location.replace('/login');
-</script>
-
-<!-- page content renders immediately for authenticated users -->
-<h1>Dashboard</h1>
-<!-- ... -->
-</body>
-```
-
-**Never do this:**
-```html
-<!-- ❌ FORBIDDEN — causes flash of invisible content, breaks on slow connections -->
-<body style="visibility:hidden">
-<script>
-   checkAuth().then(() => document.body.style.visibility = 'visible');
-</script>
-```
-
-The correct pattern is: redirect immediately if no token, render normally if token exists.
-Auth validation happens on the first API call — if the token is expired, the 401 handler
-clears storage and redirects to login.
-
-### Logout
-
-```javascript
-function logout() {
-   sessionStorage.removeItem('admin_token');
-   localStorage.removeItem('admin_token');
-   document.cookie = 'admin_token=; path=/; max-age=0';
-   window.location.replace('/login');
-}
-```
-
-### Creating Admin Users — the bootstrap order
-
-There is no dashboard screen for creating Admin Auth users. The first admin is created
-through the API, and the customer's own password never has to pass through you, through
-the platform owner, or through any chat session.
-
-The four steps only work in this order:
-
-```
-create_user  (random throwaway password)
-  → request-reset      (requires NO login)
-    → reset-password   (the user sets their own password)
-      → login
-```
-
-**Step 1 — create the account with a throwaway password.**
-
-```
-execute_integration(
-  project_id: 12345,
-  service: "admin_auth",
-  endpoint: "create_user",
-  input: { email: "admin@example.com", password: "<40 random characters>" }
-)
-```
-
-Generate the password randomly, never show it to the user, and never store it. It exists
-only so the account row exists. `create_user` accepts only `email` and `password` — no
-name field. The email is the unique identifier and the login credential.
-
-**Step 2 — the user requests a reset link.** `request-reset` needs no session and no
-token. That is what makes the bootstrap self-service.
-
-```
-POST /iapi/project/{id}/admin-auth/request-reset
-{ "email": "admin@example.com" }
-```
-
-**`request-reset` only works for an existing, active user.** An unknown address returns
-`{"success": true}` and sends nothing — that is the enumeration guard, not a failure.
-Reset alone therefore does not solve the bootstrap; `create_user` + reset together do.
-
-**Step 3 — the user sets their own password.**
-
-```
-POST /iapi/project/{id}/admin-auth/reset-password
-{ "token": "rst_...", "password": "...", "password_confirmation": "..." }
-```
-
-`password_confirmation` is required. Minimum 8 characters. The token is single-use and
-expires 60 minutes after it was requested. A successful reset invalidates all active
-sessions for that user.
-
-**Step 4 — login**, as described in the canonical path table below.
-
-#### You must build two pages — they do not exist by default
-
-This is the step that gets missed, and it is the reason the flow appears to be missing
-from the platform. Creating the user is not enough: without these two pages there is no
-screen to start from.
-
-| Page | Does | Link from |
-|------|------|-----------|
-| `forgot-password.html` | email field → `POST .../admin-auth/request-reset` | `login.html` |
-| `reset-password.html` | reads `token` from the query string → `POST .../admin-auth/reset-password` | the emailed link |
-
-Three rules for those pages:
-
-1. **Both pages must be publicly reachable.** No visitor session, no OTP gate, no auth
-   check. The `rst_` token is the proof of identity. If you put the reset page behind the
-   site's own login, the user needs a password to set their password.
-2. **Hard-code the project ID in `reset-password.html`.** The emailed URL is
-   `{base}/reset-password.html?token=rst_xxx&project={website_id}` — that parameter is the
-   *website* ID, while the IAPI route runs on the *dashproject* ID. Reading it from the
-   query string produces a page that posts to the wrong project and fails silently, at the
-   exact moment the user believes they are done. Ignore the parameter, use the project
-   number you built the site with.
-3. **Keep the confirmation generic.** Say "if an account exists for this address, a link is
-   on its way" — never "unknown address". That preserves the enumeration guard.
-
-Set `noindex,nofollow` on both.
-
-#### Delivery
-
-The reset mail goes out over the AuthMailer cascade: custom SMTP → the project's own
-Resend key → the platform. A project with no mail provider configured still receives the
-mail, sent from a platform address. Configuring Resend is not a prerequisite — do not tell
-a customer it is.
-
-#### There is no change-password endpoint
-
-A signed-in admin cannot change their own password. The browser endpoints are `login`,
-`verify`, `logout`, `refresh`, `request-reset` and `reset-password`. The reset flow is also
-the route for a voluntary password change — it is the design, not a workaround.
-
-`update_password` does exist, but it is an MCP tool: it is admin-side, it means someone
-other than the user chooses the password, and it invalidates all that user's sessions. Use
-it only as a last resort, never as the normal path.
+If `guidance.unavailable` is true, call `get_integration_schema` once more. If it is still
+unavailable, tell the user and do not build auth flows or required pages from memory.
 
 ### Decision Tree — Which Auth System?
 
@@ -2565,270 +2367,6 @@ Does the page need login?
         └── Provisioned/closed membership — you control access, paid tiers, tenant isolation?
             └── Use Tenant Auth (IAPI) — see "Tenant-Protected Pages"
 ```
-
-### Common Pitfalls — Why Admin Auth Has Its Own Pattern
-
-Multiple AI builds have walked into the same trap: trying to call admin endpoints
-via the SAPI execute route (`WP.sapi().call('/execute/admin_auth/login', ...)`).
-That path requires a visitor session bootstrap and CSRF tokens — machinery the SAPI
-library wraps for visitor forms but that does not align with how admin auth issues
-and validates `wsa_` Bearer tokens.
-
-**The canonical admin auth path is always:**
-
-| Step | Call | Auth header |
-|------|------|------------|
-| 1. Login | `POST /iapi/project/{id}/admin-auth/login` | None — body has email + password |
-| 2. Store token | sessionStorage + localStorage + cookie | — |
-| 3. Authenticated calls | `POST /iapi/project/{id}/{service}/{endpoint}` | `Authorization: Bearer wsa_...` |
-| 4. Verify on page load | `POST /iapi/project/{id}/admin-auth/verify` | None — body has token |
-| 5. Logout | `POST /iapi/project/{id}/admin-auth/logout` | None — body has token |
-
-**Anti-patterns — never do these for admin auth:**
-
-- ❌ `WP.sapi().call('/execute/admin_auth/login', ...)` — that route is for visitor SAPI flows
-- ❌ Manual `GET /sapi/session` + `X-CSRF-Token` headers — admin auth doesn't use the SAPI session layer
-- ❌ Reading the token from `r.data.token` after a SAPI execute call — wrong envelope shape
-- ❌ `<body style="visibility:hidden">` while running an async auth check — see Page Rendering above
-- ❌ URL with underscore for login/verify/logout: `/iapi/project/{id}/admin_auth/login` — those specific routes are `admin-auth` (hyphen)
-- ❌ Pointing the user at the WebsitePublisher dashboard to create or set an admin password — **that screen does not exist**. Admin users are created via `create_user`; passwords are set by the user through `request-reset` → `reset-password`
-- ❌ Building a login page without a link to `forgot-password.html` — the first admin then has no way to set a password, and the account is unreachable
-
-The IAPI route is fully self-contained: no session, no CSRF, just `Authorization: Bearer`
-on the request. If you find yourself adding session bootstrap or CSRF token logic to an
-admin page, stop — you've taken the wrong turn.
-
-### Image Upload in Admin Panels
-
-Admin panels often need image upload — for portfolio management, product photos, team
-pictures, or any content the admin manages visually.
-
-There are two approaches. **Asset Proxy** stores files in the PAPI asset system (visible
-in `list_assets`, manageable). **SAPI upload** stores files in the form uploads bucket.
-Both return CDN URLs. Choose based on whether you need the files in the project's asset system.
-
-#### Option A — Asset Proxy (recommended for admin panels)
-
-Uses the admin's existing `wsa_` token. No extra setup needed — no SAPI form, no CDN script.
-Files go into the PAPI asset system.
-
-```javascript
-const PROJECT_ID = 12345;
-
-function getAdminToken() {
-  return sessionStorage.getItem('admin_token');
-}
-
-// Convert file to base64
-function fileToBase64(file) {
-  return new Promise(function(resolve, reject) {
-    var reader = new FileReader();
-    reader.onload = function() { resolve(reader.result.split(',')[1]); };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-// Upload via asset-proxy (uses admin token, no WPA key needed)
-async function uploadImage(file, slug) {
-  var base64 = await fileToBase64(file);
-
-  var res = await fetch('/iapi/project/' + PROJECT_ID + '/asset-proxy/upload', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + getAdminToken()
-    },
-    body: JSON.stringify({
-      slug: slug,          // e.g. "images/product-42.jpg"
-      base64: base64,
-      overwrite: true
-    })
-  });
-
-  if (res.status === 401) { window.location.replace('/login'); return; }
-  var data = await res.json();
-  if (data.success) {
-    return data.asset_url;  // CDN URL: cdn.websitepublisher.ai/custom/wid.../images/...
-  }
-  throw new Error(data.message || 'Upload failed');
-}
-
-// Combined: upload image, then save product
-document.getElementById('product-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  var file = document.getElementById('photo').files[0];
-  var name = document.getElementById('name').value;
-  var slug = 'images/product-' + Date.now() + '.' + file.name.split('.').pop();
-
-  var imageUrl = file ? await uploadImage(file, slug) : null;
-  await saveProduct(name, imageUrl);  // IAPI call with wsa_ token (see Admin-Only IAPI Calls)
-});
-```
-
-#### Option B — SAPI Upload (alternative, requires form setup)
-
-```javascript
-const PROJECT_ID = 12345;
-var sapi = WP.sapi(PROJECT_ID);  // SAPI session for uploads
-
-// Admin is logged in — wsa_ token in sessionStorage (see Admin Login above)
-function getAdminToken() {
-  return sessionStorage.getItem('admin_token');
-}
-
-// Image upload — uses SAPI (no admin token needed)
-async function uploadImage(file) {
-  var res = await sapi.uploadFile('admin_upload', file);
-  if (res.ok) {
-    return res.data.data.asset_url;  // CDN URL: cdn.websitepublisher.ai/custom/wid.../images/...
-  }
-  throw new Error(res.data.error?.message || 'Upload failed');
-}
-
-// Save data with image URL — uses admin auth (wsa_ token)
-async function saveProduct(name, imageUrl) {
-  var res = await fetch('/iapi/project/' + PROJECT_ID + '/product-catalog/create-product', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + getAdminToken()
-    },
-    body: JSON.stringify({ name: name, image_url: imageUrl })
-  });
-  if (res.status === 401) { window.location.replace('/login'); return; }
-  return res.json();
-}
-
-// Combined flow: upload image, then save record
-document.getElementById('product-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  var file = document.getElementById('photo').files[0];
-  var name = document.getElementById('name').value;
-
-  var imageUrl = file ? await uploadImage(file) : null;
-  await saveProduct(name, imageUrl);
-});
-```
-
-#### Setup Requirements
-
-For image upload to work in an admin panel, you need:
-
-1. **A SAPI form configured** for the upload (even a minimal one):
-   ```
-   configure_form(
-     project_id: 12345,
-     form_name: "admin_upload",
-     required_fields: [],
-     action: { type: "none" },
-     max_submits_per_session: 20
-   )
-   ```
-
-2. **The CDN script** on the page:
-   ```html
-   <script src="https://cdn.websitepublisher.ai/js/sapi-client.js"></script>
-   ```
-
-3. **Admin auth** already working (see Admin Login above)
-
-#### How the Auth Systems Coexist
-
-| Operation | Auth system | Token | Endpoint |
-|---|---|---|---|
-| Admin login | IAPI Admin Auth | `wsa_` | `/iapi/project/{id}/admin-auth/login` |
-| Read/write data | IAPI | `wsa_` Bearer | `/iapi/project/{id}/{service}/{endpoint}` |
-| Upload image (Option A) | IAPI Asset Proxy | `wsa_` Bearer | `/iapi/project/{id}/asset-proxy/upload` |
-| Upload image (Option B) | SAPI | Session + CSRF | `/sapi/project/{id}/form/upload` |
-| Result | — | — | CDN URL in `asset_url` response field |
-
-With **Option A** (asset-proxy), everything uses the same `wsa_` admin token — simpler code,
-no second auth system needed.
-
-With **Option B** (SAPI upload), the SAPI session lives separately in
-`sessionStorage.wp_{projectId}_sid` and never conflicts with the admin token.
-
-#### Common Mistake
-
-Do NOT try to upload images via `upload_asset` or MAPI asset routes from the browser.
-Those are MCP/API tools, not browser endpoints.
-
-**These approaches will NOT work for browser-based uploads:**
-
-- `POST /mapi/project/{id}/assets` with `wsa_` token → 401 (wsa_ not accepted for asset writes)
-- `/iapi/project/{id}/upload-asset` → 404 (does not exist)
-- A made-up top-level route like `/project/{id}/upload-asset` (missing the `{service}` segment) → 404 — asset writes are `asset_proxy/upload`; the IAPI route shape is always `/project/{id}/{service}/{endpoint}`
-- Vault keys (`{{vault:wpa_...}}`) in browser JavaScript → vault refs are server-side only
-- Custom API proxy with vault key → proxy passes the literal string, not the resolved value
-
-**Use Asset Proxy (Option A) or SAPI upload (Option B)** — both handle auth correctly
-and return CDN URLs. Asset Proxy is simpler because it uses the same `wsa_` token
-you already have for data operations.
-
-**Asset Proxy is not images-only.** It accepts any `slug` and stores any bytes in the
-PAPI asset system. To write or refresh a JSON/CSV/text data file from an admin panel
-(e.g. regenerating a products snapshot at `data/products-snapshot.json`), base64-encode
-the text and POST the same `{ slug, base64, overwrite: true }` body — no special
-"snapshot" or "data" route exists or is needed. Server-side (agent/MCP), use
-`upload_asset(content_text=…, overwrite=true)` instead.
-
-### Vault-Based API Keys (AI-Requested)
-
-When building admin panels or integrations that need server-side API access,
-the AI can request a project key **without ever seeing the raw token**.
-The project owner approves via email — the key goes directly into the vault.
-
-#### The Flow
-
-1. **AI requests a key:**
-   ```
-   execute_integration(
-     project_id: 12345,
-     service: "auth_keys",
-     endpoint: "request-key",
-     input: {
-       vault_key_name: "wpa_dashboard",
-       purpose: "Leads dashboard — read and update leads"
-     }
-   )
-   ```
-   Response: `{ status: "pending_approval", request_id: "req_a1b2c3..." }`
-
-2. **Project owner receives email** → clicks confirmation link → key is created
-
-3. **AI checks status** (optional, same session):
-   ```
-   execute_integration(
-     project_id: 12345,
-     service: "auth_keys",
-     endpoint: "check-status",
-     input: { request_id: "req_a1b2c3..." }
-   )
-   ```
-   Response: `{ status: "approved" }` (or `"pending"` / `"expired"`)
-
-4. **AI uses the vault reference** in IAPI proxy calls, scheduled tasks, or page templates:
-   `{{vault:...}}` with the key name from step 1 (here: `wpa_dashboard`)
-
-The AI never sees the actual token. The key exists only in the vault and is resolved
-server-side by the IAPI proxy.
-
-#### Key Rules
-
-- `vault_key_name` **must** start with `wpa_` (prevents overwriting other vault secrets)
-- `purpose` is required — it's shown to the owner in the confirmation email
-- Max 2 pending requests per project at a time
-- Unconfirmed requests expire after 1 hour
-- Each confirmation link works only once
-
-#### When to Use This
-
-Use `auth_keys` when a page or scheduled task needs to make authenticated API calls
-and no WPA key exists in the vault yet. Common scenarios: admin dashboards,
-automated data sync tasks, headless API integrations.
-
-Do NOT use this for visitor-facing pages — those use SAPI sessions (no Bearer token needed).
 
 ---
 
@@ -3465,8 +3003,7 @@ tasks(operation: "list", status: "open")          # What hasn't started yet
 ```
 
 > One tool, many operations: `list`, `get`, `history`, `create`, `add_history`, `update`,
-> `delete`, `search`, `export`. The old separate names (`create_task`, `list_tasks`,
-> `add_task_history`, …) still dispatch but are **legacy** — always use `tasks`.
+> `delete`, `search`, `export`.
 
 This gives every AI session — regardless of platform — a shared understanding of
 where the project stands. The user doesn't have to re-explain what was already built.
