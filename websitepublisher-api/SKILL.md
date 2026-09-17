@@ -16,7 +16,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.20.0"
+   version: "3.21.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1517,7 +1517,8 @@ A page where several named members read the *same* protected records — a team 
 internal project log, shared documentation — uses the `records` integration with a
 `policy_json` carrying `owner_scope: "tenant"`. The policy decides which rows each member
 sees and which fields are stripped; the browser never sends an identity. See
-*Shared Member Content* below for the policy shape, the browser call and the guards.
+*Shared Member Content* below; the policy shape, the browser call and the guards come from
+`get_integration_schema(service: "records")`.
 
 Two rules that matter more here than anywhere else:
 
@@ -2385,156 +2386,12 @@ This is a third auth system, distinct from Admin Auth and Visitor Auth:
 | **Tokens** | `wsa_` | **`wst_` access + `rft_` rotating refresh** | Session ID (no token on page) |
 | **Route** | `/iapi/project/{id}/admin-auth/...` | **`/iapi/project/{id}/tenant-auth/...`** | `WP.sapi(id).call(...)` |
 
-The `tenant-auth` route is **public and self-contained**: the project id is in the URL,
-so there is **no API key, no SAPI session, and no CSRF** — plain `fetch()` from the page.
-Use a **relative path** (`/iapi/project/{id}/tenant-auth/...`). Since August 2026 every
-published site — wildcard subdomain and custom domain alike — proxies `/sapi/`, `/iapi/`,
-`/mapi/` and `/wpe/` straight to the API, so a relative call is same-origin: no CORS
-preflight, and any session cookie stays first-party. The absolute host
-`https://api.websitepublisher.ai` still works and remains valid for existing pages.
+How to build it — provisioning, OTP and password login, token storage and refresh, the auth
+guard, logout and anti-patterns — comes from `get_integration_schema(service: "tenant_auth")`
+in the `guidance` block.
 
-### Provisioning members (you control the list)
-
-Members are created server-side via MCP — never from the browser:
-
-```
-execute_integration(
-  project_id: 12345,
-  service: "tenant_auth",
-  endpoint: "create_user",
-  input: { email: "member@example.com", tenant_code: "community", password: "optional", role: "member" }
-)
-```
-
-Omit `password` for a **code-only (passwordless) member**. With `require_provisioned`
-on (default), only emails you have created can authenticate — that is what makes the
-membership *closed*. Related MCP endpoints: `list_users`, `delete_user` (deactivates +
-kills all sessions), `update_password`, `set_tenant_code`, `list_sessions`, and
-`configure` (set `methods` = `email_otp` / `password`, `success_url`, and token TTLs).
-
-### Member Login
-
-**Method A — email OTP (passwordless, default):**
-
-```javascript
-const PROJECT_ID = 12345; // replace with actual project ID
-
-// 1. request a 6-digit code by email (always returns success — no user enumeration)
-await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/request-code`, {
-   method: 'POST',
-   headers: {'Content-Type': 'application/json'},
-   body: JSON.stringify({ email })
-});
-
-// 2. verify the code → access + refresh token
-const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/verify-code`, {
-   method: 'POST',
-   headers: {'Content-Type': 'application/json'},
-   body: JSON.stringify({ email, code })
-});
-const data = await r.json();
-// { success, tenant_code, success_url, token: 'wst_...', refresh_token: 'rft_...' }
-```
-
-**Method B — email + password** (only when the `password` method is enabled):
-
-```javascript
-const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/login`, {
-   method: 'POST',
-   headers: {'Content-Type': 'application/json'},
-   body: JSON.stringify({ email, password })
-});
-const data = await r.json(); // same shape as verify-code
-```
-
-On success, store **both** tokens (triple storage survives navigation, tab reopen, and
-middleware checks) and redirect to `data.success_url` (or `/`):
-
-```javascript
-if (data.success && data.token) {
-   sessionStorage.setItem('tenant_token', data.token);
-   localStorage.setItem('tenant_token', data.token);
-   localStorage.setItem('tenant_refresh', data.refresh_token);
-   document.cookie = `tenant_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-   window.location.replace(data.success_url || '/');
-}
-```
-
-### Page Rendering — Auth Guard
-
-Immediate redirect if there is no token — **never** a hidden body with an async check:
-
-```html
-<body>
-<script>
-   var token = sessionStorage.getItem('tenant_token')
-           || localStorage.getItem('tenant_token');
-   if (!token) window.location.replace('/login');
-</script>
-
-<!-- content renders immediately for members -->
-<h1>Members Area</h1>
-</body>
-```
-
-Then confirm the token server-side on load to get the member's identity, and to catch
-expired/revoked sessions:
-
-```javascript
-const v = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/verify`, {
-   method: 'POST',
-   headers: {'Content-Type': 'application/json'},
-   body: JSON.stringify({ token: localStorage.getItem('tenant_token') })
-});
-const info = await v.json(); // { valid, email, tenant_code, tenant_user_id }
-if (!info.valid) {
-   // try refresh (below); if that fails, clear storage + redirect to /login
-}
-```
-
-### Refreshing the session
-
-Access tokens are short-lived (default 24h); refresh tokens last longer (default 14d)
-and **rotate on every use** — the old pair is invalidated immediately:
-
-```javascript
-const r = await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/refresh`, {
-   method: 'POST',
-   headers: {'Content-Type': 'application/json'},
-   body: JSON.stringify({ refresh_token: localStorage.getItem('tenant_refresh') })
-});
-const data = await r.json(); // new { token, refresh_token }
-// store the NEW token + refresh_token — the previous ones no longer work
-```
-
-Refresh when `verify` reports `valid:false`, or when an authenticated call returns 401.
-
-### Logout
-
-```javascript
-await fetch(`/iapi/project/${PROJECT_ID}/tenant-auth/logout`, {
-   method: 'POST',
-   headers: {'Content-Type': 'application/json'},
-   body: JSON.stringify({ token: localStorage.getItem('tenant_token') })
-});
-sessionStorage.removeItem('tenant_token');
-localStorage.removeItem('tenant_token');
-localStorage.removeItem('tenant_refresh');
-document.cookie = 'tenant_token=; path=/; max-age=0';
-window.location.replace('/login');
-```
-
-### Canonical path — always
-
-| Step | Call | Auth header |
-|------|------|------------|
-| 1a. Request code (OTP) | `POST /iapi/project/{id}/tenant-auth/request-code` | None — body `{email}` |
-| 1b. Or password login | `POST /iapi/project/{id}/tenant-auth/login` | None — body `{email,password}` |
-| 2. Verify code → tokens | `POST /iapi/project/{id}/tenant-auth/verify-code` | None — body `{email,code}` |
-| 3. Store token + refresh_token | session + local + cookie | — |
-| 4. Verify on page load | `POST /iapi/project/{id}/tenant-auth/verify` | None — body `{token}` |
-| 5. Refresh (on 401 / expiry) | `POST /iapi/project/{id}/tenant-auth/refresh` | None — body `{refresh_token}` |
-| 6. Logout | `POST /iapi/project/{id}/tenant-auth/logout` | None — body `{token}` |
+If `guidance.unavailable` is true, call `get_integration_schema` once more. If it is still
+unavailable, tell the user and do not build auth flows or member pages from memory.
 
 ### Calling SAPI as a signed-in member
 
@@ -2580,36 +2437,6 @@ Two things to know about the response:
 Once a member is signed in, do **not** query MAPI from the browser to show them their own
 data. Use the `account` integration — see **Member Self-Profile**.
 
-### Anti-patterns — never do these for tenant auth
-
-- ❌ SAPI execute: `POST /sapi/project/{id}/execute/tenant_auth/verify` — the post-login
-  actions return **403 "not accessible via visitor session"**. They are served by the
-  dedicated `tenant-auth` IAPI route, not SAPI. (request-code/verify-code/login are the
-  only tenant_auth actions reachable via SAPI; use the IAPI route for everything.)
-- ❌ URL with underscore: `/iapi/project/{id}/tenant_auth/login` — those routes are
-  `tenant-auth` (**hyphen**). The underscore path hits the generic execute route
-  (Bearer-key + CSRF) and returns **419/401**.
-- ❌ A relative path to a prefix that is **not** proxied: `/papi/`, `/wapi/`, `/vapi/`,
-  `/dapi/`, `/capi/`. Only `/sapi/`, `/iapi/`, `/mapi/` and `/wpe/` are reachable from a
-  published domain. The site serves everything else, so you get the HTML 404 page and
-  parsing it as JSON throws `Unexpected token '<'`. Use `https://api.websitepublisher.ai`
-  for those — and never from browser JS if they need a key.
-- ❌ Putting a `wsa_`/`wpa_` API key in browser JS to reach tenant auth — not needed and
-  a security violation. The `tenant-auth` route needs no key.
-- ❌ `<body style="visibility:hidden">` with an async auth check — use immediate redirect
-  (see Page Rendering).
-
-The route is fully self-contained: no session, no CSRF, no API key. `verify`/`refresh`/
-`logout` act on the token in the body, so a member can only affect **their own** session.
-
-### Which auth system?
-
-- **Tenant Auth (this section)** — provisioned/closed membership; you control the member
-  list; paid tiers, courses, private libraries; `tenant_code` isolation; password and/or OTP.
-- **Visitor Auth (SAPI)** — open member areas where anyone with an email may self-enrol
-  (loyalty, gated freebies, newsletters). See "Contact Forms (SAPI)".
-- **Admin Auth (IAPI)** — a single site-admin/owner managing content. See "Admin-Protected Pages".
-
 ## Member File Downloads — Gated Files
 
 For files only paying or provisioned members may download — ebooks, course material,
@@ -2628,96 +2455,8 @@ refund/cancel (`delete_user`) revokes access instantly.
 | **Revocation** | Instant — session/grant revoked → next call 403 | Revoke the token; the CDN URL itself stays public |
 | **Use for** | Paid/member content: ebooks, courses, reports | Free lead magnets, low-risk downloads |
 
-### Setup (MCP)
-
-```
-# 1. Project defaults — entitlement + delivery
-execute_integration(project_id: 12345, service: "gated-files", endpoint: "configure",
-  input: { entitlement_mode: "library", delivery_mode: "signed", signed_ttl_secs: 120 })
-
-# 2. Register a file (exactly ONE source: storage_key | base64 | source_url)
-execute_integration(project_id: 12345, service: "gated-files", endpoint: "put-file",
-  input: { filename: "ebook.pdf", content_type: "application/pdf",
-           source_url: "https://cdn.websitepublisher.ai/project12345/files/ebook.pdf" })
-# → returns { id, storage_key } — the file now lives on the PRIVATE bucket
-```
-
-- `entitlement_mode`: `library` — any active member of the file's `tenant_code` (all
-  tenants of the site when omitted) | `asset` — explicit per-file grants via
-  `grant`/`revoke` (`grant_type`: `tenant_code` or `tenant_user`).
-- `delivery_mode`: `signed` (short-lived presigned URL, storage serves the bytes —
-  default) | `stream` (the platform streams the bytes). The **browser code is identical**
-  for both.
-- `source_url` accepts **our own public storage only** (SSRF guard). To ingest a file
-  that lives elsewhere: upload it as a normal project asset first, then pass that CDN
-  URL — and delete the public copy afterwards.
-- Other MCP endpoints: `grant`, `revoke`, `list-files`, `stats`.
-
-### Browser flow — member downloads a file
-
-Requires a logged-in tenant member (`wst_` token — see "Tenant-Protected Pages") plus a
-SAPI session for CSRF:
-
-```javascript
-const sapi = WP.sapi(PROJECT_ID);
-sapi.setBearer(localStorage.getItem('tenant_token'));   // once per page load
-
-// Ask for a download URL. Session, CSRF and stale-session recovery are the
-// client's job — see "Calling SAPI as a signed-in member".
-const res = await sapi.call('POST', '/execute/gated-files/download', { file_id: 42 });
-
-if (!res.data.success) {
-  console.warn(res.data.error, res.data.upstream_status);   // see Shared Member Content
-  return;
-}
-const data = res.data.result;          // { url, expires_in, delivery, filename }
-
-// Fetch the file within expires_in (seconds) — the URL is short-lived
-if (data.url) window.location.href = data.url;
-```
-
-A `401 "Tenant authentication required"` means the member's `wst_` is missing or expired:
-refresh or re-login. An expired **SAPI session** needs no handling here — the client
-clears it and retries once on its own.
-
-### Browser flow — member adds a file
-
-`put-upload` takes bytes from a member and writes them straight to the private bucket, so
-nothing is ever momentarily public. `tenant_code` comes from the session and is **refused**
-if sent in the body, along with `storage_key`, `source_url`, `entitlement_mode` and
-`delivery_mode` — all owner-only. Append-only: this path creates, never overwrites.
-
-Off by default. Enable per project with `configure { member_upload_enabled: true }`.
-
-```javascript
-const res = await sapi.callUpload('/execute/gated-files/put-upload', {
-  file: fileInput.files[0],
-  title: 'Crosswalk, iteration 1'      // optional, shown back by list-mine
-});
-if (!res.data.success) { console.warn(res.data.error); return; }
-const f = res.data.result;             // { file_id, filename, size_bytes }
-```
-
-Check `file.size` before calling — see the note under "Calling SAPI as a signed-in member".
-
-`list-mine` is the read counterpart: the files this **organisation** may reach, not just
-the caller's own. Every row is put through the same entitlement check `download` runs, so
-it can never list a file `download` would then refuse. It never returns `storage_key`.
-
-```javascript
-const res = await sapi.call('POST', '/execute/gated-files/list-mine', { limit: 50 });
-const files = res.data.success ? res.data.result.files : [];
-// [{ file_id, filename, content_type, size_bytes, title, added_by, source, created_at }]
-```
-
-### Anti-patterns — never do these for member files
-
-- ❌ Uploading member-only files as normal PAPI assets — they land on the **public CDN**;
-  anyone with the URL can download them forever, whatever gate the page has.
-- ❌ Using `file-downloads` for paid/sensitive content — `verify-token` returns the public
-  CDN URL, which afterwards works without any token.
-- ❌ Embedding a static download token in page JS — everyone who views source has it.
-  gated-files needs no token in the page: the member's **session is the access**.
+Setup, the download and member-upload flows and anti-patterns come from
+`get_integration_schema(service: "gated-files")` in the `guidance` block.
 
 ## Member Self-Profile — `account/get-me`
 
@@ -2732,69 +2471,8 @@ anything not listed is never returned, so a private column cannot leak by accide
 
 Works with a verified **Visitor Auth** session and with a **Tenant Auth** member session.
 
-### Configure once (MCP)
-
-```
-execute_integration(project_id: 12345, service: "account", endpoint: "set-profile",
-  input: {
-    enabled: true,
-    require_verified: true,
-    identity: { from: "session_email" },
-    sources: [
-      {
-        key: "me",
-        entity: "members",
-        match: { field: "email", from: "session_email" },
-        fields: ["id", "name", "email", "created_at"],   // allowlist — REQUIRED
-        cardinality: "one",
-        not_found: "null"
-      },
-      {
-        key: "orders",
-        entity: "orders",
-        match: { field: "member_email", from: "session_email" },
-        fields: ["id", "total_cents", "status", "created_at"],
-        cardinality: "many"
-      }
-    ]
-  })
-```
-
-- `cardinality`: `one` → object, `many` → array.
-- `not_found`: `null` (default) or `error`.
-- Child records can be scoped to the matched parent instead of the session email — useful
-  for order lines belonging to the member's own orders.
-- `get-profile` reads the current configuration back; `remove-profile` clears it.
-
-### Browser flow
-
-```javascript
-const sapi = WP.sapi(PROJECT_ID);
-// Tenant members only. For Visitor Auth the verified session is enough — omit this line.
-sapi.setBearer(localStorage.getItem('tenant_token'));
-
-const res = await sapi.call('POST', '/execute/account/get-me', {});
-if (!res.data.success) {
-  console.warn(res.data.error, res.data.upstream_status);   // see Shared Member Content
-  return;
-}
-const data = res.data.result;   // { verified: true, email, me: {...}, orders: [...] }
-```
-
-Without a verified session the call returns **401 `"A verified visitor session is
-required"`** — it fails closed, it does not return an empty profile.
-
-`update-profile` writes back to the same record, restricted to the fields the profile
-allows. The member can only ever reach their own row.
-
-### Anti-patterns
-
-- ❌ Querying a MAPI entity from the browser and filtering on the member's email in JS —
-  the unfiltered rows already reached the browser.
-- ❌ Passing the member's email or id in the request body so the server can look them up —
-  whatever the browser sends, a visitor can change. The session is the identity.
-- ❌ Omitting the `fields` allowlist to "get everything" — it is required precisely so a
-  later column addition cannot silently start leaking.
+Configuration, the browser flow and anti-patterns come from
+`get_integration_schema(service: "account")` in the `guidance` block.
 
 ## Shared Member Content — `records`
 
@@ -2806,90 +2484,8 @@ It reads a MAPI entity under the identity the session already established, and t
 `policy_json` decides which rows come back and which fields are stripped. The browser never
 sends an identity, so there is nothing to tamper with.
 
-> **New (September 2026).** Verified end-to-end on 1 September 2026: two members of the
-> same tenant read the same rows, a member of another tenant sees none, a cross-tenant
-> record returns 403, and hidden fields stay out of the response. It is new, so treat the
-> first page you build on it as you would any new feature — check it from a real member
-> login before you tell anyone their content is private.
-
-### Requirements
-
-- The entity **must** carry a `policy_json`. An entity without one returns **404** — that is
-  deliberate: an ungoverned entity would hand back every row.
-- Keep `public_read: false`. The policy decides access; `public_read` is ignored once a
-  policy exists.
-- Read-only. Members cannot write through this route.
-- **Not SSR.** See the SSR warning earlier in this document — the render cache is shared
-  across visitors, so gated content must be fetched client-side.
-
-### Policy for shared content
-
-All members of one organisation share the same rows — no per-row ownership:
-
-```json
-{ "owner_field": "tenant_code",
-  "owner_scope": "tenant",
-  "rules": {
-    "read": {"verified":"own","project":"all"},
-    "list": {"verified":"own","project":"all"} },
-  "fields": { "verified": { "hide": ["internal_note"] } } }
-```
-
-Every member of that tenant sees the tenant's rows; a member of another tenant sees none.
-Requires **Tenant Auth** (`wst_`) — plain Visitor Auth gives a per-person identity and
-cannot express "our rows".
-
-### Browser flow
-
-```javascript
-const sapi = WP.sapi(PROJECT_ID);
-sapi.setBearer(localStorage.getItem('tenant_token'));   // once per page load
-
-const res = await sapi.call('POST', '/execute/records/list', {
-  entity: 'iteration_log',
-  filter: { published: 1 },      // optional, equality only
-  sort_by: 'id', sort_order: 'ASC',
-  per_page: 50, offset: 0
-});
-
-if (!res.data.success) {
-  // A denied read arrives as HTTP 200 with success:false — see below.
-  console.warn(res.data.error, res.data.upstream_status);
-  return;
-}
-const data = res.data.result;   // { entity, data: [...], pagination: {...} }
-```
-
-`records/get` takes `{ entity, id }` and returns a single record.
-
-> **Check `j.success`, not the HTTP status.** The SAPI execute route only returns a real
-> HTTP error for things it rejects itself — no session, missing CSRF (401/403). Anything
-> the integration refuses (403 not your row, 404 unknown or ungoverned entity, 422 a
-> blocked filter) comes back as **HTTP 200** with `success: false`, an `error` string and
-> an `upstream_status`. Code that branches on `res.ok` or `res.status` treats a permission
-> denial as a success and renders an empty page with no explanation — the worst possible
-> outcome for a member area, because it looks like "no content" rather than "access
-> denied". This applies to every `/execute/` call, `gated-files` and `account` included.
-
-### What the guards refuse, and why
-
-- **Filtering or sorting on a field the policy hides → 422.** Hiding a column keeps it out
-  of the response, but filtering on it would let a member binary-search the value from the
-  rows that come back. Both are blocked.
-- **Filtering on the `owner_field` → 422.** Scope is set by the policy, never by the client.
-- **A record belonging to another tenant → 403.** An unknown record, an unknown entity, or an
-  ungoverned entity → **404**, all indistinguishable from outside.
-- `per_page` is capped at 200.
-
-### Anti-patterns
-
-- ❌ Setting `public_read: true` "just to get it working" — the content becomes readable at
-  `/mapi/public/{projectId}/{entity}` by anyone, and a login gate in the page protects
-  nothing because it runs in the browser.
-- ❌ Rendering shared member content with `<!--#wps-mapi -->` — the SSR cache is shared per
-  page, so the first member's data would be served to everyone.
-- ❌ Checking the policy as the project owner and concluding it works — an owner bypasses row
-  scoping entirely. Verify from a real member session.
+Requirements, the policy shape, the browser call, the guards and anti-patterns come from
+`get_integration_schema(service: "records")` in the `guidance` block.
 
 ## AI Continuity — Staying on Track Across Sessions
 
