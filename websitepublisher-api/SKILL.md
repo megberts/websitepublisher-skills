@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.23.0"
+   version: "3.24.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -2223,147 +2223,10 @@ HTML template** with full data-binding — use it when the layout must be exact:
 pre-printed stationery, packing slips, quotes, certificates. The template controls 100% of
 the output; no platform branding is applied.
 
-### The template is a PAPI asset
-
-Upload the template like any asset (`upload_asset`, e.g. `templates/invoice.html`), iterate
-with `patch_asset`. Rules:
-
-- A **complete HTML document** with its own CSS. Set page margins in the template via
-  `@page { margin: ...; }` (A4 portrait). `letterhead_top_mm` exists as a convenience
-  override for pre-printed stationery, but defining `@page` yourself is preferred.
-- **Layout + template tokens only. NEVER put customer data, order data, or secrets in a
-  template** — assets are public on the CDN. Data arrives at render time via `data`.
-- DOMPDF renders it: use tables and inline styles for structure; `position:absolute` works
-  for fixed placement (address blocks). Font is **DejaVu Sans** — full glyph set incl. `€`.
-- Caps: template ≤ 512 KB, rendered HTML ≤ 2 MB. Rate limit 60/hour.
-
-### Template dialect — same engine as SSR pages
-
-`{{var}}` (HTML-escaped — customer strings can never inject markup), `{{{var}}}` (raw,
-only for values the template author controls), dot paths, `{{#if}}/{{#else}}/{{#unless}}`
-with operators (`==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `starts_with`, `ends_with`)
-and full same-type nesting, `{{#each}}` **including nesting** (`{{this}}` for scalar items,
-`@index`, `{{../parent}}`), filter chains.
-
-Money is always **integer cents** on this platform. Format in the template, never in a
-chain:
-
-| Filter | In → out | Example |
-|---|---|---|
-| `money_eur` | cents → `€ 1.234,56` (NL) | `{{total_cents \| money_eur}}` |
-| `vat_incl:21` | VAT-inclusive cents → VAT cents (fiscal rounding) | `{{total_cents \| vat_incl:21 \| money_eur}}` |
-| `divide:N` | numeric division | `{{qty \| divide:2}}` |
-| `date` | date → `13-08-2026` (**default d-m-Y**, format arg optional) | `{{paid_at \| date}}` |
-| `number:2` / `currency:EUR` | NL notation | building blocks under `money_eur` |
-
-Invoice-shaped template fragment (lines with sub-lines, conditional discount):
-
-```html
-{{#each lines}}
-<tr><td>{{name}}</td><td class="right">{{qty}}</td><td class="right">{{price_cents | money_eur}}</td></tr>
-{{#each subs}}<tr><td class="sub" colspan="3">{{this}}</td></tr>{{/each}}
-{{/each}}
-{{#if discount}}<p>Discount: {{discount | money_eur}}</p>{{/if}}
-<p>Total: {{total_cents | money_eur}} — VAT (21%): {{total_cents | vat_incl:21 | money_eur}}</p>
-```
-
-### Calling it
-
-`data` is the **root context** — its keys become the template's top-level variables.
-
-```
-execute_integration(service: "pdf_document", endpoint: "render-template", input: {
-  "template_slug": "templates/invoice.html",
-  "data": { "total_cents": 16170, "paid_at": "2026-08-13", "lines": [ ... ] },
-  "store": false,          // false → in-memory, base64-only (email attachments)
-  "return_base64": true    // default store=true → archived to the private documents
-})                         //   bucket + signed download URL (never on the public CDN)
-```
-
-`data` must be a real object — a JSON *string* is rejected with a 422.
-
-### External images/CSS — strict by design, self-reporting
-
-- **Relative URLs are auto-rewritten to the project's own CDN**: `src="images/logo.png"`
-  just works.
-- Allowed absolutes: `data:` URIs and `https://cdn.websitepublisher.ai/...`. Everything
-  else (other hosts, `http:`, protocol-relative) is **stripped** before rendering and
-  reported back as `data.blocked_assets` in the response. **Check that field after a test
-  render** — if your logo URL shows up there, upload it as a project asset and reference
-  it relatively.
-
-### Automatic invoice printing — the `order_events` chain pattern
-
-Thread the full order object as **one raw token** (exact single tokens keep their type),
-then feed the PDF base64 into the mail step:
-
-This is the `create-subscription` **input** — `steps` is a TOP-LEVEL field. Do NOT wrap
-it in `config`: that is the *stored* shape you see back in `list-subscriptions`, and an
-input `config` field is rejected.
-
-```
-execute_integration(service: "order_events", endpoint: "create-subscription", input: {
-  "event": "order.paid",
-  "target_type": "iapi_chain",
-  "steps": [
-    { "service": "order-management", "endpoint": "get-order",
-      "input_template": { "order_id": "{{fields.order_id}}" } },
-    { "service": "pdf_document", "endpoint": "render-template",
-      "input_template": {
-        "template_slug": "templates/invoice.html",
-        "data": { "order": "{{steps.0.result.order}}" },
-        "store": false, "return_base64": true } },
-    { "service": "resend", "endpoint": "send-email",
-      "input_template": {
-        "from": "shop@yourdomain.com", "to": "printer@yourdomain.com",
-        "subject": "Invoice {{fields.order_id}}",
-        "text": "Attached.",
-        "attachments": [ { "filename": "invoice.pdf",
-                           "content_base64": "{{steps.1.result.data.base64}}" } ] } }
-  ]
-})
-```
-
-Watch the resend attachment field: it is **`content_base64`** (not `content`). Need
-per-line structured data (sizes, prescriptions, options)? Add an
-`order-management/get-line-meta` step and pass its result alongside the order
-(`"lens": "{{steps.1.result}}"`); omit `def_key` unless you have verified the stored
-definition key, and copy the real meta key names from one live `get-line-meta` call.
-
-The template then reads `{{order.total_cents | money_eur}}`, `{{#each order.lines}}`, etc.
-Note: iapi_chain retries default to **off** (steps have real side effects).
-
-### Testing & replaying the chain — `order_events/fire-event`
-
-Never test a chain with a real payment. `fire-event` pushes ONE existing order through
-the exact same payload/queue/retry path as a real transition:
-
-```
-execute_integration(service: "order_events", endpoint: "fire-event", input: {
-  "order_id": 42, "event": "order.paid", "dry_run": true
-})
-```
-
-- **Always `dry_run:true` first** — it reports `would_fire` / `would_skip` per
-  subscription without enqueueing anything. Real fires are REAL: chains send real
-  mail and print real documents.
-- An order+event already delivered to a subscription is skipped (dedup). **A FAILED
-  delivery blocks a new fire just the same** — the dedup row exists either way — so
-  re-running a failed delivery always needs `force: true`. `force` writes a distinct
-  replay key (`{order_id}:{event}:replay:{timestamp}`), keeping the original row and
-  the audit trail intact.
-- Reprinting orders for a NEW subscription needs no `force` (no delivery rows exist
-  yet): create the subscription, verify one order, then fire per order.
-- The response lists per subscription: `action` (`fired`/`skipped`/`would_fire`/
-  `would_skip`), `delivery_id`, and a `reason` on skips. Check the outcome afterwards
-  in `list-deliveries` (filter by `order_id` or `status`).
-
-### Build workflow
-
-1. Upload the template asset. 2. Test-render with `store:false` + sample `data`; decode
-the base64 and check the PDF **and** `blocked_assets`. 3. Iterate via `patch_asset`.
-4. Wire the chain. Errors are explicit: `TEMPLATE_NOT_FOUND`, `TEMPLATE_INVALID`
-(non-`.html` / traversal), `TEMPLATE_TOO_LARGE`, `RENDER_OUTPUT_TOO_LARGE`.
+The template rules, the template dialect and its filters, the call itself, the external-asset
+policy and the build workflow come from `get_integration_schema(service: "pdf_document")` in
+the `guidance` block. Automatic invoice printing through an `order_events` chain, and how to
+test it without a real payment, come from `get_integration_schema(service: "order_events")`.
 
 ---
 
