@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.24.0"
+   version: "3.25.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1915,126 +1915,28 @@ Use what `list_integrations` shows.
 
 ### Available Integrations
 
-All of these are called the same way — `execute_integration(project_id, service, endpoint, input)` —
-and `get_integration_schema(project_id, service)` gives the exact input fields per endpoint.
-The **"Reach for it when"** column is the part that matters most: it is the bridge from what the
-user actually says to the capability that already exists. If a request matches one of those
-phrases, the answer is never "I can't do that" — it is `list_integrations` followed by the call.
+There is no catalog in this document, and that is deliberate: a list here is stale the
+moment an integration is added. Three live sources, cheapest first:
 
-**Built-in — no API key, no setup, ready on every project.**
+- `search_integrations(query)` — say what the user wants in their own words ("a coupon
+  code", "print a shipping label", "member login"). Every integration carries the phrases
+  users actually say, so this is the shortest route from a request to the block that
+  already does it.
+- `list_integrations(project_id)` — everything on this project, split into configured and
+  needs-setup. The only source that knows the **state**; some capabilities are account- or
+  entitlement-scoped and appear nowhere else.
+- `https://www.websitepublisher.ai/integrations.txt` — the whole public catalog in one
+  fetch, no auth, one line per integration with its endpoint names. A `*` means built-in:
+  no API key, works immediately. Everything else needs `setup_integration` once.
 
-*Content, pages & media*
+Once you have a name, they are all called the same way:
+`execute_integration(project_id, service, endpoint, input)`, and
+`get_integration_schema(project_id, service)` returns the exact input fields per endpoint
+plus that integration's usage guidance.
 
-| Service | What it does | Reach for it when the user says… |
-|---|---|---|
-| `blog` | Posts, categories, RSS feed generation | "blog", "news section", "articles", "RSS" |
-| `pages` | List pages from inside a page/integration context | "which pages exist", dynamic navigation |
-| `records` | Read entity records from a page context (read-only lane) | server-rendered lists without admin auth |
-| `data_grid` | Drop-in editable data grid for admin panels | "table I can edit", "spreadsheet view", "CRUD screen" |
-| `asset_proxy` | Upload/delete assets from a browser admin panel (no WPA key) | "upload images from the admin panel" |
-| `versioning` | Asset version history + rollback | "restore the previous version", "undo that CSS change" |
-| `site_context` | Store design tokens (colors, fonts, style, locale) across sessions | "keep the same style next time" |
-| `site-import` | Import an existing website into the project | "move my current site over", "rebuild what I have" |
-| `schema-org` | Generate/detect structured data (JSON-LD) | "rich snippets", "structured data", "SEO markup" |
-| `web-scraper` | Fetch and parse an external page (robots-aware) | "pull the content from this URL" |
-
-*Commerce — cart, checkout, order, fulfilment*
-
-| Service | What it does | Reach for it when the user says… |
-|---|---|---|
-| `product-catalog` | Products, variants, categories, bulk import | "webshop", "products", "catalog" |
-| `product-search` | Search, filter and autocomplete over the catalog | "search bar for products", "filters" |
-| `shopping-cart` | Server-side cart: add/update/remove, price, clear | "cart", "basket" |
-| `checkout-flow` | Checkout state machine incl. **invoice mode** (quote, no online payment) | "checkout", "order on account", "request a quote" |
-| `order-management` | Orders, statuses, line metadata, lookup by payment | "my orders", "order status" |
-| `invoice-generator` | Generate, fetch, list and credit invoices | "invoice", "credit note", "billing document" |
-| `inventory-tracker` | Stock levels, increment/decrement, low-stock report | "stock", "inventory", "sold out" |
-| `discount-engine` | Discount codes: create, validate, calculate, usage | "coupon", "promo code", "discount" |
-| `pricing-rules` | Tiered/volume pricing per product | "bulk pricing", "customer tiers" |
-| `multi-currency` | Exchange rates and price conversion | "sell in dollars too", "currency switcher" |
-| `loyalty` | Points config, per-product points, balances | "loyalty points", "rewards", "savings card" |
-| `wishlist` | Per-visitor wishlist | "save for later", "favourites" |
-| `abandoned-cart` | Detect abandoned carts + send recovery mail | "people leave without buying" |
-| `ecommerce-analytics` | Revenue, top products, funnel, AOV, customer stats | "how is the shop doing", "best sellers" |
-| `shipping-rates` | Own shipping rates and rate tables | "shipping costs", "delivery fees" |
-| `myparcel` | Labels, shipments and tracking via MyParcel | "print a shipping label", "track the parcel" |
-| `order_events` | Event subscriptions on the order lifecycle (webhooks, chained actions) | "email the invoice automatically when paid" |
-| `calendar` | Calendars, events, bookable resources (chair/table/room), availability, slots, bookings — 15 endpoints, see "Calendar & Booking" | "appointments", "reservations", "book a table", "hotel rooms", "availability" |
-
-*Email & messaging*
-
-| Service | What it does | Reach for it when the user says… |
-|---|---|---|
-| `email_archive` | **The user's own archived mail** — search, read, threads, attachments, drafts, contexts | "my inbox", "email", "newsletters", "what did X send me", "past correspondence", "did I reply to…" |
-| `resend` | Transactional email (contact forms, notifications) | "send an email when someone submits" |
-| `email-templates` | Named templates: render-and-send, preview, manage | "same layout for every mail" |
-| `email_layout` | Branded email layout/wrapper for the project | "our house style in emails" |
-| `email_account` | Real mailboxes on a custom domain (users, aliases, domains) | "info@mydomain.com", "give me an email address" |
-| `linkedin` | Post text/images to a LinkedIn organisation page | "post this to LinkedIn" |
-
-*Members, auth & access*
-
-| Service | What it does | Reach for it when the user says… |
-|---|---|---|
-| `admin_auth` | Password-protected admin areas (login, reset, sessions) | "admin panel behind a login" |
-| `tenant_auth` | Provisioned/paid member portal (codes, sessions, refresh) | "member area", "customer portal", "subscribers only" |
-| `account` | Signed-in member reads/updates their own record | "my account page", "profile page" |
-| `member-provisioning` | Map offers/purchases to member access, event log, simulation | "buying the course gives access" |
-| `gated-files` | Private file delivery to members | "paid PDF", "downloads for members only" |
-| `file-downloads` | Signed download tokens with stats and revocation | "expiring download link" |
-| `identity` | Change the key email on an identity | "customer changed their email address" |
-| `auth_keys` | Request a project API key (human-approved, vault-stored) | AI needs a key without seeing it |
-
-*Data, documents & flows*
-
-| Service | What it does | Reach for it when the user says… |
-|---|---|---|
-| `data-import` | File → schema mapping → validate → dry-run → import | "import this CSV/Excel", "migrate my data" |
-| `xlsx-export` | Generate an Excel export | "export to Excel", "download as spreadsheet" |
-| `pdf_document` | Branded PDF from blocks (`generate`) or your own HTML template (`render-template`) | "PDF", "printable invoice", "downloadable brochure" |
-| `pdf_layout` | Reusable PDF layout config (can copy from the email layout) | "same header on every PDF" |
-| `flow_framework` | Definition + instance state machines for multi-step processes | "multi-step application", "approval workflow" |
-| `leads` | Store and retrieve form submissions as leads | "collect leads", "who filled in the form" |
-| `lead-scoring` | Score leads, single or batch | "which leads are worth calling" |
-| `comment-system` | Comments with moderation | "let visitors comment" |
-| `review-system` | Product reviews + ratings with moderation | "star ratings", "customer reviews" |
-| `prediction_game` | Prediction/pool games: participants, outcomes, scores | "pool", "prediction competition" |
-| `oura_sync` / `strava_sync` / `oura` / `strava` | Sync personal health/activity data into the project | "pull in my Oura/Strava data" |
-| `offline_sync` | Ping/sync/pull for offline-capable clients | "keep working without internet" |
-| `api-proxy` | Register and proxy an external API through the platform | "call our own backend from the page" |
-| `anthropic` | Claude messages from inside the project (server-side) | "the site itself should use AI" |
-
-*Ops, debugging & platform*
-
-| Service | What it does | Reach for it when the user says… |
-|---|---|---|
-| `tracer` | Live request tracing for API + page requests | "it fails and I don't know why" |
-| `capability_requests` | Report a genuine platform gap — **last resort**, see "You Are the Builder" | nothing above fits and you verified it |
-
-**Task tracking (TAPI)** is not an integration but a first-class MCP tool: `tasks(operation: …)`.
-Reach for it when the user says "where were we", "continue the build", "what's left" — see
-"Task Tracking (TAPI)".
-
-**External services — available, need an API key via `setup_integration` first.**
-Roughly 50 more, addressed exactly the same way once configured:
-
-| Category | Services |
-|---|---|
-| Payments | `stripe`, `mollie`, `paypal` |
-| Email & marketing | `mailgun`, `sendgrid`, `smtp`, `brevo`, `mailchimp`, `convertkit` |
-| Messaging | `twilio`, `slack-webhook`, `discord-webhook`, `telegram` |
-| Shipping | `postnl`, `sendcloud`, `shopsunited` |
-| AI | `openai`, `gemini`, `mistral`, `groq`, `perplexity`, `replicate`, `elevenlabs`, `deepgram`, `stability`, `imagen` |
-| Media | `unsplash`, `pexels`, `cloudinary`, `imgur`, `giphy`, `youtube`, `vimeo` |
-| CRM & productivity | `hubspot`, `notion`, `linear`, `todoist`, `github`, `sentry` |
-| Data & database | `airtable`, `supabase`, `contentful`, `google-places`, `openweather`, `newsapi`, `overheid-io` |
-| Booking & health | `calcom`, `oura`, `strava` |
-| Social | `twitter` |
-
-> The two lists above describe what the platform ships. **`list_integrations(project_id)` remains
-> the source of truth** for what is actually reachable on this project right now — some
-> capabilities are account- or entitlement-scoped and only appear there. Check the tool, not
-> your memory of this table.
+**Task tracking (TAPI)** is not an integration but a first-class MCP tool:
+`tasks(operation: …)`. Reach for it when the user says "where were we", "continue the
+build", "what's left" — see "Task Tracking (TAPI)".
 
 #### Email Archive — searching the user's own mail
 
@@ -2042,41 +1944,9 @@ This one deserves its own note because it is the capability models most often mi
 asks about **their own inbox, newsletters, senders or past correspondence**, that is not a job for
 web search or a third-party mail connector — the platform archives and indexes their mail itself.
 
-`search` is scoped to one archive, so `archive_id` is **required**. Always resolve it first:
-
-```
-1. execute_integration(service: "email_archive", endpoint: "list-archives", input: {})
-   → pick the archive (list-archives also accepts owner_email to filter)
-
-2. execute_integration(service: "email_archive", endpoint: "search", input: {
-       archive_id: 7,
-       query: "The Neuron",
-       mode: "hybrid",            // keyword (default) | semantic | hybrid (best recall)
-       date_from: "2026-08-28",
-       sort: "newest",
-       limit: 20
-   })
-   → metadata + snippets, no bodies
-
-3. execute_integration(service: "email_archive", endpoint: "get-message", input: {
-       archive_id: 7, id: 12345
-   })
-   → full body_plain for the messages that matter
-```
-
-Other endpoints: `get-thread` (whole conversation), `list-attachments` + download by index,
-`get-stats` (counts, date range, per-folder), `set-state` (mark handled/kept/todo),
-`draft-reply` (suggested reply text — never sends), and the context layer
-(`context-list`, `context-get`, `context-feed`, `context-match`, `context-members`) for
-LLM-ready rolling summaries of a topic.
-
-Two behaviours worth knowing before you report "nothing found":
-
-- Handled messages are **hidden by default** (a reply in Sent marks them handled) — pass
-  `include_done: true` to see everything.
-- Newsletters are frequently HTML-only, so `snippet` comes back `null` with
-  `snippet_source: null`. That means *no plain-text body*, **not** an empty result — fetch the
-  message with `get-message` instead of concluding there is nothing there.
+The how-to — resolving `archive_id` first, the search-then-fetch order, the context layer
+and the two reasons a result looks empty when it is not — comes from
+`get_integration_schema(service: "email_archive")` in the `guidance` block.
 
 ### How integrations work
 
@@ -2147,71 +2017,17 @@ and security — reimplementing these is unnecessary and error-prone.
 
 ### Bulk Product Import
 
-For large catalogs, use `bulk-upsert-products` instead of looping `create-product`:
-
-```
-execute_integration(
-  service: "product-catalog",
-  endpoint: "bulk-upsert-products",
-  input: {
-    "items": [
-      {"sku": "TSH-001", "name": "Classic Tee", "price_cents": 2999, "status": "active"},
-      {"sku": "TSH-002", "name": "V-Neck Tee", "price_cents": 3499, "status": "active"},
-      {"sku": "TSH-001", "price_cents": 2799}
-    ]
-  }
-)
-```
-
-Each item is matched by SKU: existing → update, new → create (needs `name` + `price_cents`).
-Max 500 items per call. Response includes per-item status and `summary.by_error_type`.
-
-**Always check `result.failed` and `result.summary.by_error_type`** — `success: true`
-means the call itself worked, not that every item succeeded.
+Large catalogs go in with `bulk-upsert-products`, not a loop over `create-product`. The
+call, the SKU matching rules, the limits and the per-item error handling come from
+`get_integration_schema(service: "product-catalog")` in the `guidance` block.
 
 ### Debugging with Request Tracer
 
-When something isn't working — a page returns wrong data, an integration fails,
-or performance is slow — use the Request Tracer to see exactly what happened:
-
-1. **Start a trace session:**
-   ```
-   execute_integration(
-     service: "tracer",
-     endpoint: "start",
-     input: { "ttl": 120, "include_optimizer": true }
-   )
-   → returns hash (e.g., "tr_abc12345")
-   ```
-
-2. **Perform the operation that's failing** — create a page, submit a form, call an integration
-
-3. **Read the trace:**
-   ```
-   execute_integration(
-     service: "tracer",
-     endpoint: "logs",
-     input: { "hash": "tr_abc12345" }
-   )
-   ```
-
-The trace shows every API request and page render with HTTP method, path, status
-code, duration, SQL query summary, and which server handled the request.
-
-Integration failures include typed error data (`error_type`, `error_code`, and
-`error_field` / `recovery` when applicable) so you can see exactly what went
-wrong without guessing.
-
-**When to use the tracer:**
-- Page renders wrong content → trace optimizer request, check SQL queries
-- Integration call fails → trace API request, check `error_type` and `recovery`
-- Request is slow → check `duration_ms` and `db.total_ms` breakdown
-- "It works sometimes" → `server` field shows which node handled each request
-
-**Options:**
-- `include_optimizer: true` — also trace public page renders (default: off)
-- `include_sql: false` — skip SQL summary (default: on)
-- `ttl: 10-300` — session duration in seconds (default: 60)
+When something is wrong and you cannot see why — a page renders the wrong data, an
+integration fails, a request is slow — the `tracer` integration records every API request
+and page render for a short session. How to run one, which symptom points at which part of
+the trace, and the session options come from `get_integration_schema(service: "tracer")`
+in the `guidance` block.
 
 ---
 
@@ -2408,55 +2224,9 @@ Design decisions should be **saved immediately** when made — not at the end of
 session when they might be forgotten. Use `site_context` as a living design brief
 that any AI session can pick up.
 
-`site_context` stores **design tokens only**: `color_palette`, `fonts`,
-`style_notes`, `locale`. Build status, page progress, and to-dos do **not** belong
-here — that is what Task Tracking (TAPI, next section) is for. Sending any other
-field returns `"No valid fields provided"`.
-
-**Save after every design decision** — writes are a **deep merge**: only the fields
-you send are overwritten, everything else is preserved:
-```
-execute_integration(
-  service: "site_context",
-  endpoint: "set-context",
-  input: {
-    color_palette: { primary: "#2D5016", secondary: "#F5F0E8", accent: "#B8860B",
-                     background: "#FAF7F2", text: "#1A1A1A" },
-    fonts: { heading: "Playfair Display", body: "Inter" },
-    style_notes: "Warm, artisanal, Japanese-inspired minimalism",
-    locale: "en"
-  }
-)
-```
-
-Field reference: `color_palette` keys are `primary`, `secondary`, `accent`,
-`background`, `text` (hex strings). `fonts` keys are `heading` and `body`
-(font family names). `style_notes` is free text, max 500 chars. `locale` is
-ISO 639-1 (`"nl"`, `"en"`, `"de"`).
-
-**Sections** — a project with more than one visual style (e.g. public site vs admin
-panel vs email templates) stores each as a named section via the optional `section`
-parameter (`"frontend"`, `"admin"`, ...). Without it, reads and writes target
-`"default"`. Max 10 sections per project. The `"default"` section is also included
-in the `get_project_status` response.
-
-**Retrieve at the start of every session:**
-```
-execute_integration(service: "site_context", endpoint: "get-context", input: {})
-```
-Pass `section: "all"` to get every section as a keyed object.
-
-**List which sections exist:**
-```
-execute_integration(service: "site_context", endpoint: "list-sections", input: {})
-```
-
-**Delete context** — ⚠️ omitting `section` deletes **ALL** sections for the project.
-Always pass the section explicitly:
-```
-execute_integration(service: "site_context", endpoint: "delete-context",
-  input: { section: "admin" })
-```
+What it stores (design tokens only), how the deep merge works, named sections, reading
+them back and the one call that can wipe everything come from
+`get_integration_schema(service: "site_context")` in the `guidance` block.
 
 This is the single most important continuity tool. Without it, a new AI session
 has to ask the user to re-explain every design choice.
@@ -2598,18 +2368,9 @@ POST   /iapi/project/{id}/calendar/update-booking-status  pending|confirmed|comp
 
 ### Calendar & Booking — usage notes
 
-- **One model, three verticals**: appointments = `chair` (slot + service duration), restaurant =
-  `table` (slot + `seating_minutes`, `min_party`/`max_party`), hotel = `room` (night granularity,
-  `checkin`/`checkout` dates, `min_stay_nights`). Configure per resource via `config`.
-- A booking automatically creates an event on the resource's calendar; cancelling flips both to
-  `cancelled`. Bookings with a `visitor_email` get a confirmation/cancellation email automatically.
-- **Visitor-facing booking** works today via a SAPI form with an `iapi` action:
-  `action: { type: "iapi", service: "calendar", endpoint: "book", input_template: { resource_id: 12,
-  start_at: "{{fields.start_utc}}", end_at: "{{fields.end_utc}}", visitor_name: "{{fields.name}}",
-  visitor_email: "{{fields.email}}", party_size: "{{fields.party}}", source: "web" } }`.
-  Render available options server-side or fetch them owner-side; anonymous browser calls to
-  `get-slots` are not enabled yet.
-
+Resource types (chair, table, room), what a booking does to the calendar, and the
+visitor-facing booking flow come from `get_integration_schema(service: "calendar")` in the
+`guidance` block.
 
 ### Key SAPI Endpoints (visitor-facing, no bearer token)
 ```
@@ -2624,35 +2385,10 @@ GET    /sapi/project/{id}/auth/status            Check auth status
 
 ### Lead Capture
 
-Form submissions with `action: {"type": "leads"}` are stored in the platform's
-built-in lead capture — no integration setup required.
-
-**Retrieve leads via MCP tool:**
-```
-leads_get_leads  →  project_id (+ optional: status, form_name, page, per_page)
-```
-
-**Retrieve leads via HTTP (for dashboard pages / browser JavaScript):**
-```
-POST /iapi/project/{id}/leads/get-leads
-Authorization: Bearer {wps_token}
-Content-Type: application/json
-Body: {"page": 1, "per_page": 25}
-
-Optional filters: status (new/contacted/converted), form_name, date_from, date_to
-```
-
-**Important:** Leads are always authenticated — there is no public URL.
-Never ask for routing files to find the leads endpoint — the URL above is canonical.
-
-**Configure lead capture on a form:**
-```json
-{
-   "form_name": "contact",
-   "actions": [{"type": "leads"}],
-   "required_fields": ["name", "email"]
-}
-```
+Form submissions with `action: {"type": "leads"}` are stored in the platform's built-in
+lead capture — no integration setup required. Retrieving them, configuring a form and the
+rule that leads are never public come from `get_integration_schema(service: "leads")` in
+the `guidance` block.
 
 ---
 
