@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.25.0"
+   version: "3.26.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -2317,54 +2317,19 @@ GET    /papi/project/{id}/pages?type=fragment   List fragments
 ```
 
 ### Key IAPI Endpoints
+
+Every integration is reached the same way — there is no per-service route to look up:
+
 ```
-POST   /iapi/project/{id}/{service}/{endpoint}   Execute integration
-
-# Examples:
-POST   /iapi/project/{id}/leads/submit-lead          Store a lead
-POST   /iapi/project/{id}/leads/get-leads             Retrieve leads (authenticated)
-POST   /iapi/project/{id}/leads/update-status         Update lead status
-POST   /iapi/project/{id}/resend/send-email           Send email via Resend
-POST   /iapi/project/{id}/mollie/create-payment       Create Mollie payment
-POST   /iapi/project/{id}/site_context/set-context    Save design context (deep merge)
-POST   /iapi/project/{id}/site_context/get-context    Get design context (section or "all")
-POST   /iapi/project/{id}/site_context/list-sections  List stored context sections
-POST   /iapi/project/{id}/site_context/delete-context Delete a section (no section = ALL)
-POST   /iapi/project/{id}/capability_requests/submit-request  Report platform gap (last resort)
-POST   /iapi/project/{id}/product-catalog/bulk-upsert-products  Bulk import (up to 500)
-POST   /iapi/project/{id}/tracer/start                Start debug trace session
-POST   /iapi/project/{id}/tracer/logs                 Read trace entries
-POST   /iapi/project/{id}/pdf_document/generate       Branded PDF from content blocks
-POST   /iapi/project/{id}/pdf_document/render-template  Own HTML template (PAPI asset) → PDF; data = root context; store:false → base64
-
-# Email Archive (service: "email_archive" — the user's own archived mail):
-POST   /iapi/project/{id}/email_archive/list-archives    Archives + source counts (resolve archive_id FIRST)
-POST   /iapi/project/{id}/email_archive/search           Keyword/semantic/hybrid search; archive_id required
-POST   /iapi/project/{id}/email_archive/get-message      One message incl. body_plain
-POST   /iapi/project/{id}/email_archive/get-thread       Whole thread, chronological (metadata only)
-POST   /iapi/project/{id}/email_archive/list-attachments Attachments of one message (index, name, size)
-POST   /iapi/project/{id}/email_archive/get-stats        Counts, size, date range, per-folder
-POST   /iapi/project/{id}/email_archive/set-state        Mark handled / kept / todo
-POST   /iapi/project/{id}/email_archive/draft-reply      Suggested reply text (never sends)
-POST   /iapi/project/{id}/email_archive/context-feed     LLM-ready rolling summary + recent messages
-
-# Calendar & Booking (service: "calendar" — 15 endpoints, all datetimes UTC):
-POST   /iapi/project/{id}/calendar/upsert-calendar    Create/update a calendar (timezone for rendering)
-POST   /iapi/project/{id}/calendar/list-calendars     List calendars
-POST   /iapi/project/{id}/calendar/delete-calendar    Delete calendar + events (refuses while resources attached)
-POST   /iapi/project/{id}/calendar/upsert-event       Create/update event (start_at/end_at UTC)
-POST   /iapi/project/{id}/calendar/delete-event       Delete event
-POST   /iapi/project/{id}/calendar/list-events        Events overlapping [from, to)
-POST   /iapi/project/{id}/calendar/upsert-resource    Bookable resource: type chair|table|room, capacity, config
-POST   /iapi/project/{id}/calendar/list-resources     List resources (filter type/active)
-POST   /iapi/project/{id}/calendar/delete-resource    Delete resource (refuses with upcoming bookings)
-POST   /iapi/project/{id}/calendar/set-availability   Rules per resource: weekdays/slot_minutes/exceptions/vacations
-POST   /iapi/project/{id}/calendar/get-slots          Free slots (tables/chairs) or nights (rooms), local+UTC times
-POST   /iapi/project/{id}/calendar/book               Transactional claim — double bookings impossible; returns cancel_token
-POST   /iapi/project/{id}/calendar/cancel-booking     Cancel via cancel_token (visitor) or booking_id (admin)
-POST   /iapi/project/{id}/calendar/list-bookings      Bookings with filters + pagination
-POST   /iapi/project/{id}/calendar/update-booking-status  pending|confirmed|completed|cancelled|no_show
+POST   /iapi/project/{id}/{service}/{endpoint}      Execute integration
 ```
+
+`{service}` and `{endpoint}` come from `list_integrations(project_id)` or
+`get_integration_schema(project_id, service)`, and the public catalog at
+`https://www.websitepublisher.ai/integrations.txt` lists every endpoint name per
+integration in one fetch. Those three are the ground truth; a list of examples here would
+only go stale. Over MCP the same call is
+`execute_integration(project_id, service, endpoint, input)`.
 
 ### Calendar & Booking — usage notes
 
