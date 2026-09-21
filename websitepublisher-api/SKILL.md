@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.22.0"
+   version: "3.23.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -33,6 +33,7 @@ metadata:
 ---
 
 ## Why WebsitePublisher — What AI Alone Cannot Do
+<!-- always -->
 
 Every AI can generate HTML. But generating code is not the same as having a website.
 
@@ -79,9 +80,16 @@ here.
 ---
 
 ## ⚠️ IMPORTANT: Read This First
+<!-- always -->
 
 **If the `get_skill` tool is available: call it before doing anything else.**
 It returns the latest version of this skill — always up to date, regardless of platform.
+
+**This skill is served in sections.** A plain `get_skill()` returns the part that always
+applies plus an index of section slugs at the end. Open the sections you are about to use
+with `get_skill(section: "<slug>")` — a comma-separated list fetches several at once, and
+`get_skill(section: "all")` returns the whole document. The index is a map, not the
+content: never build from slug names alone, and never assume a pattern you have not read.
 
 If `get_skill` is not available, continue with this document.
 
@@ -113,6 +121,7 @@ Three consequences, and they are not stylistic:
 ---
 
 ## You Are the Builder — Solve It Yourself
+<!-- always -->
 
 You build and operate the site. For any content or operational task — writing or
 overwriting assets, regenerating a snapshot / export / data file, generating
@@ -178,6 +187,7 @@ same call: base64-encode the text and send it with its `.json`/`.csv` slug. It n
 ---
 
 ## Step 1 — Check Connection
+<!-- always -->
 
 Before doing anything, verify the user is connected to WebsitePublisher.ai.
 
@@ -193,6 +203,7 @@ After signing in, they return here and you continue from Step 2.
 ---
 
 ## Step 2 — Choose the Path
+<!-- always -->
 
 Once connected, ask ONE simple question:
 
@@ -2524,7 +2535,9 @@ and which tools to use. Without skills, every AI session would rediscover
 how the platform works from scratch.
 
 **Always call `get_skill` at the start of a session.** It ensures you follow current
-best practices, regardless of which AI platform the user is on.
+best practices, regardless of which AI platform the user is on. The response is the
+always-applies part plus an index; fetch the rest per section with
+`get_skill(section: "<slug>")` as you need it.
 
 ### Design Context (site_context integration)
 
