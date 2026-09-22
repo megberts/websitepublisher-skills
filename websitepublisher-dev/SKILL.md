@@ -8,7 +8,7 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "2.0"
+  version: "2.1"
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
@@ -19,27 +19,32 @@ metadata:
 > This skill is for internal platform development sessions only.
 > For building customer websites, use: https://www.websitepublisher.ai/skills/websitepublisher-api/SKILL.md
 
-### Size budget — 26 KB
+### Size budget — 28.000 bytes
 
-Every session loads this file in full, so its length is a running cost. **When it passes
-26 KB, move reference material out to a companion document and link it — do not trim the
-rules to make room.**
+Every session loads this file in full, so its length is a running cost. **Past 28.000
+bytes, move reference material out to a companion document and link it — do not trim the
+rules to make room.** Measure with `wc -c`.
 
-The distinction is what the reader does with it: a **rule** changes what you do next and
-belongs here; a **reference** is something you look up while writing one specific thing and
-belongs in its own file. The `policy_json` grammar went out on exactly that test (v2.1).
+A **rule** changes what you do next and belongs here. A **reference** is something you look
+up while writing one specific thing and belongs in its own file.
 
-26 is not a round number on purpose. The budget was first set at 24, the file came in at
-25.3, and hitting 24 would have meant cutting the incident write-ups out of *How We Work
-Here* — the evidence that stops those rules being ignored. A budget that makes you delete
-the reason for a rule is worse than no budget. It sits just above the current size so the
-next addition forces the decision immediately, not in a year.
+> It moved twice on the day it was set (24 → 26 → 28) because it was set mid-repair, and a
+> budget fixed while the file still is measures a draft. **Do not move it again to fit an
+> addition** — cut reference, or write a companion.
 
-Companion documents:
+### Companion documents
 
 | Document | Covers |
 |---|---|
 | `skills/websitepublisher-dev/authz-policy-json.md` | `policy_json` grammar, worked examples, delivery paths, verification log |
+
+Served at `https://www.websitepublisher.ai/<path>`.
+
+> **`get_skill` cannot deliver these.** Its enum is `main` / `design` / `dev` only, so a
+> session without web access cannot reach a companion at all. If a fetch fails, say so and
+> work from what the skill itself states — do not guess the grammar. Same for
+> `integrations.txt`: when the URL is unreachable, `search_integrations` and
+> `list_integrations` give you the same answers over MCP.
 
 ---
 
@@ -48,10 +53,11 @@ Companion documents:
 Every development session MUST start with these two steps before doing anything else:
 
 **Step 1 — Load platform skill**
-Read the customer-facing skill for platform conventions:
 ```
-https://www.websitepublisher.ai/skills/websitepublisher-api/SKILL.md
+get_skill(skill_name: "main")
 ```
+Use the tool, not the URL. `get_skill` serves the current sectioned version with an index;
+the raw URL serves the whole file and can lag behind by several minor versions.
 
 **Step 2 — Load open tasks and the current checklist**
 ```
@@ -70,32 +76,53 @@ platform is; this says *how* to touch it without breaking it or misreporting it.
 
 ### Verify, don't infer
 
-Reading a flag is not the same as walking the path. On 21 September a guidance entry was
-published claiming `execute_integration` could not reach the browser endpoints of
-`data_grid`, inferred from the manifest's `mcp_tool: false`. The flag keeps an endpoint out
-of `tools/list` and out of the schema overview; it does **not** block execution. The call
-reaches the helper. The entry was wrong and had to be corrected and republished.
+Reading a flag is not the same as walking the path. A guidance entry was published claiming
+`execute_integration` could not reach the browser endpoints of `data_grid`, inferred from
+`mcp_tool: false`. That flag hides an endpoint from `tools/list`; it does not block
+execution. The entry was wrong and had to be republished.
 
 Before stating how something behaves, follow the code path that implements it. If you have
 not followed it, say so in the same sentence: *"the escaping bug is certain; the exploit
 chain via public forms is plausible and unverified."* A qualified claim is useful. An
 unqualified guess that turns out wrong costs more than the time it saved.
 
+This covers identifiers too: a ticket number written into a code comment before the ticket
+exists is a guess. Create it first.
+
+### Search for a precedent before you write "cannot"
+
+Following a code path tells you what **that** mechanism does. It does not tell you the limit
+of the system, and mistaking the two is the most expensive error in this file.
+
+On 22 September, "SSR cannot render integration output" was written down as fact after
+reading `MapiSsrInjector`. `CatalogSsrResolver` — three files away in the same directory —
+does exactly that, has done since TAPI #802, and `resolveRecords()` dispatches on it in
+eight lines. The same day produced two more of the same shape: `mcp_tool` above, and
+`code_search`'s `path` below. Three impossibility claims, three existing counter-examples.
+
+**Before writing that something is not possible, grep for a precedent.** One search in the
+same directory would have caught all three. And when you do write it, write what you
+checked: *"no path exists that I found"* is honest; *"no path exists"* is a claim about the
+whole system from one file.
+
 ### The measurement can be the bug
 
-On 22 September three conclusions were wrong because the *check* was wrong, not the code:
+Three conclusions in one day were wrong because the *check* was wrong, not the code:
 
 - `code_search` with a **file** path in `path` returns 404 "niet gevonden" even when the
-  pattern is in that file. Conclusion drawn: "there is no `confirm()` in this file." There
-  was, on line 1153.
-- `tail -c 120` was used to look for `[keywords]` in `integrations.txt`. The format puts
-  keywords in field 4, not at the end of the line. The check could not have succeeded.
-- `grep -c 'self::CONST'` was expected to return 6 (five uses plus the definition). The
-  definition line reads `private const CONST`, without `self::`. Five was correct.
+  pattern is in that file. Conclusion drawn: "there is no `confirm()` here." There was.
+- `tail -c 120` was used to look for `[keywords]` in `integrations.txt`, which carries them
+  in field 4, not at the end of the line. The check could not have succeeded.
+- `grep -c 'self::CONST'` was expected to return 6 — five uses plus the definition. The
+  definition reads `private const CONST`, without `self::`. Five was correct.
 
 When a result contradicts what you expect, **suspect the instrument before the code**.
 State what a passing check would have to look like, then check that your command can
 actually produce it.
+
+The same reasoning separates a fatal from an outage. When one tool on a server answers
+normally and another returns 502, the gateway is fine and the fault is inside that one
+method. A 502 is a symptom, not a diagnosis.
 
 ### Two nodes, every time
 
@@ -112,18 +139,13 @@ proof is reading the changed lines back, on both nodes.
 
 ### A report you learn to ignore is worse than no report
 
-If a check routinely shows lines that turn out to be fine, people stop reading it — and then
-they miss the one time it is right. This has shaped three design decisions:
+If a check routinely shows lines that turn out to be fine, people stop reading it — and
+then they miss the one time it is right. That is why the `guidance_hint` in error responses
+is deliberately **not** attached to 429s: a rate limit is not a usage mistake, and a hint
+that appears on every error teaches the caller to skip the field.
 
-- `guidance:import` reads the export's `scope` from its manifest, so entries that are
-  legitimately absent are not reported as missing.
-- It detects the same entry on two paths and reports that as its own category, instead of
-  calling the second one "not in the database".
-- The `guidance_hint` in error responses is deliberately **not** attached to 429s. A rate
-  limit is not a usage mistake; a hint that appears on every error teaches the caller to
-  skip the field.
-
-Prefer no output over output that is usually noise.
+**Before adding a line to any report, estimate how often it will be actionable. Under half
+the time: leave it out, or give it its own category so the reader can skip it as a group.**
 
 ### Structure beats checks
 
@@ -132,7 +154,9 @@ impossible cannot. Guidance history lives in its own directory (`guidance-histor
 than inside the current export, so `--prune` on the current state physically cannot reach
 it. The guard that was designed for that in v0.2 became unnecessary and was never built.
 
-When you catch yourself adding a check, ask whether the layout can make the check moot.
+**When you are about to add a validation, a guard or a "don't forget" comment, first try to
+change the layout so the mistake cannot be expressed.** If you cannot, keep the check and
+write down why the structural fix was not possible.
 
 ### Tests need teeth
 
@@ -169,12 +193,18 @@ php -l <file>
 grep -n '<marker>' <file>
 ```
 
-Step 1 is not ceremony. On 22 September the anchor
-`without passing through the AI conversation.',` matched **two** tools —
-`setup_integration` and `vault_store_secret` — and without the count check the vault tool
-would have received an integration-catalog pointer it has no business carrying.
+Step 1 is not ceremony: an anchor ending `without passing through the AI conversation.',`
+matched **two** tool descriptions, and the count check is the only thing that caught it
+before the vault tool received a pointer it has no business carrying.
 
 Never re-type a file's contents from earlier tool output: it may have been truncated.
+
+**`php -l` proves syntax, not resolution.** A call to a class this file has never imported —
+`Cache::remember()` in a file whose `use` block holds only `Log` — resolves against the
+current namespace, passes `php -l` cleanly, and fatals on the first request. That took
+`get_started` down for every connecting MCP session, while the patch notes carried the
+`use`-block reminder for the *other* file in the same change. Adding a call to a class you
+have not used in this file means reading the `use` block first.
 
 ### Say what you changed, in the caller's terms
 
@@ -182,6 +212,9 @@ When you change something the user cannot see in the conversation — published 
 manifest, a cron — name it explicitly and name the slug. "Live, revision 4" reads like you
 are presenting code. *"I updated the guidance entry `data_grid/grid-list-vs-list` to v3;
 here is what was wrong"* does not.
+
+**Every reply that changed invisible state opens with one line naming what changed and
+where.** Not at the end, not implied by a tool call the user has to interpret.
 
 ### Retract out loud
 
@@ -252,9 +285,8 @@ is worth keeping. A record containing 700 lines of PHP is not.
 
 ### Session label
 
-Always set `session_label` so history is attributable:
-`"claude-desktop"`, `"browser"`, `"sessie-a"` / `"sessie-b"` for parallel sessions, or a
-dated topic label such as `"2026-09-22-datagrid-snippet"`.
+Always set `session_label` so history is attributable: `"claude-desktop"`, `"browser"`,
+`"sessie-a"`, or a dated topic label such as `"2026-09-22-datagrid-snippet"`.
 
 ---
 
@@ -285,6 +317,11 @@ not opcache. It is the session boundary.
 
 When you deploy a tool-definition change, say plainly that it will only be visible in a new
 session, and verify the **code** on both nodes instead of claiming the change is live.
+
+`tools/list` over the legacy Bearer path returns the descriptions the server is serving right
+now — the only way to check a deployed description from inside a running session.
+
+---
 
 ### Scheduled work
 
@@ -343,11 +380,10 @@ through `get_integration_schema`.
 
 ### Backup
 
-`php artisan guidance:export --history --s3` writes one file per entry to
-`guidance-export/` and `guidance-history/`, and pushes to the private bucket. It runs twice
-daily from both nodes, staggered. `guidance:import --dry-run` compares an export against the
-database and **never writes** — a second write path to the store would bypass the
-validation that `integration_guidance` enforces.
+`guidance:export --history --s3` writes one file per entry and pushes to the private
+bucket, twice daily from both nodes, staggered. `guidance:import --dry-run` compares an
+export against the database and **never writes**: a second write path would bypass the
+validation `integration_guidance` enforces. Details in TAPI #1463 / #1470.
 
 ### When you change guidance
 
@@ -358,8 +394,6 @@ you are showing code the user cannot find.
 ---
 
 ## Platform Conventions
-
-These apply to all code written for WebsitePublisher. Read before touching any file.
 
 ### Code
 
@@ -373,13 +407,9 @@ These apply to all code written for WebsitePublisher. Read before touching any f
 - **JSON embedded in a `<script>` block** needs `JSON_HEX_TAG | JSON_HEX_AMP |
   JSON_HEX_APOS | JSON_HEX_QUOT`, otherwise a value containing `</script>` closes the block.
 
-### Deployment
-
-- Test environment at `*.test.websitepublisher.ai`
-- Server details are managed internally — not stored in this skill
-
 ### API conventions
 
+- Test environment at `*.test.websitepublisher.ai`
 - `patch_page` over `update_page` for small changes — saves tokens, preserves history
 - `patch_page` requires the current `base_version_hash` from `get_page` first
 - MAPI plural endpoint: `/showcases` not `/showcase`
@@ -388,34 +418,24 @@ These apply to all code written for WebsitePublisher. Read before touching any f
 
 ### Public integration catalog
 
-`https://www.websitepublisher.ai/integrations.txt` is the public, auth-less catalog of every
-integration the platform exposes — one line per block:
-`slug|category|flag|description [search keywords]|endpoints`. It is rendered live from
+`https://www.websitepublisher.ai/integrations.txt` is the public, auth-less catalog of
+every integration the platform exposes, rendered live from
 `IntegrationRegistry::getCatalog()` through the `IntegrationVisibility` decision point
-(#1403), so `system` and `private` manifests never appear in it. Detail per block:
-`https://api.websitepublisher.ai/iapi/integrations/{slug}`, same filtering.
+(#1403) — so `system` and `private` manifests never appear in it.
 
-What this means when you touch a manifest:
+What this means when you touch a manifest: it is public the moment it is not `system` or
+`private` — no publish step, 300 s cache — and the description is read worldwide, so keep it
+English. `search_keywords` folds into the line and feeds `search_integrations` scoring.
 
-- A manifest is public the moment it is not `visibility: system` or `private`. There is no
-  separate publish step; the route caches for 300 s.
-- `search_keywords` folds into the description line and feeds `search_integrations` scoring.
-- The file has a 32 KB budget; exceeding it logs a warning rather than failing. If it ever
-  trips, shard by category rather than truncate.
-- The description is what the outside world reads. This is an English catalog — a Dutch
-  description in a manifest ends up in a file AI clients fetch worldwide.
-
-Pointers to this file live in the MCP server instructions, the `rules` of `get_started`, and
-five integration tool descriptions. All are built from
-`McpController::INTEGRATIONS_CATALOG_URL`. **Change the URL there and nowhere else** — six
-literal copies is exactly the drift that constant exists to prevent (#1447).
+Pointers live in the MCP server instructions, `get_started`'s rules and five tool
+descriptions — all built from `McpController::INTEGRATIONS_CATALOG_URL`. **Change the URL
+there and nowhere else** (#1447).
 
 ### PAPI SEO
 
 - PAPI SEO values always override AI-generated HTML content
 - `seotitle` (browser/search title) ≠ `title` (WebSumo builder menu label) — distinct DB fields
-- Always include `<!-- Optimizer - ... -->` comment tags in every page
-- Auto-injected by createPage/updatePage — do not strip them
+- `<!-- Optimizer - ... -->` tags are auto-injected by createPage/updatePage — never strip them
 
 ---
 
@@ -482,13 +502,20 @@ policy from an actual member or visitor session.**
 A wrong `owner_field` or an over-permissive rule is accepted without complaint. Always
 activate on a sandbox project first, never straight onto a live table.
 
-**3. SSR is never a path for governed data.**
-`<!--#wps-mapi -->` reads only `public_read: true` entities and its cache is keyed on
-`website_id` + entity name with **no session dimension** — one cache for every visitor.
-That is the nature of the layer, not a gap to close; fetch gated content client-side from a
-verified session. Side effect: when the entity is not public the whole block is stripped
-*including* the `wps-mapi-empty` branch, and the empty result is cached for the full TTL.
-An empty block almost always means `public_read: false`, not "no records" (#1311).
+**3. SSR renders governed entities without complaining — into a shared cache.**
+`MapiSsrInjector` deliberately does **not** check `public_read` (r.732, r.760-765,
+verified on h17 22-09): SSR runs inside the site on the owner's own template, and routing
+it through the public resolver forced owners to open `/mapi/public` just to display their
+own data. So a governed entity renders fine.
+
+What did not change is the cache key — `mapi:ssr:{website_id}:{entity}` (r.740), with **no
+session dimension**. One cache serves every visitor of the page. SSR therefore still cannot
+carry anything that differs per person or per tenant, and since the `public_read` check no
+longer stops you, **nothing does**. This is a rule you enforce, not one the platform
+enforces for you. Gated content is fetched client-side from a verified session.
+
+An empty `wps-mapi` block now means the entity name does not resolve — it no longer implies
+`public_read: false` (supersedes the earlier #1311 note).
 
 **4. Refusals arrive as HTTP 200.**
 Only what the controller itself rejects (no session, missing CSRF) returns a real status.
@@ -496,66 +523,46 @@ Everything the integration refuses — 403, 404, 422, 409 — comes back as **20
 `success: false` and an `upstream_status`. Branching on `res.ok` turns a permission denial
 into a silent empty render. **Check `success`.**
 
-### HTTP contract
+### 404 or 403 — this is not a contradiction
 
-- `deny` (tier not granted the action) → **404** (no existence leak)
-- `own`-mismatch (row not owned by the caller) → **403**
-- state guard failed → **409**
+The IDOR rule above says a foreign-tenant ID returns **404**. The gate returns **403** on an
+ownership mismatch. Both are right, because they answer different questions:
+
+- **No legitimate relationship to the container at all** → **404**. The caller has no grant
+  on this entity, or the object belongs to another tenant entirely. A 403 here would confirm
+  that the object exists, which is the leak the IDOR rule closes.
+- **A legitimate grant on the container, but not on this row** → **403**. A verified member
+  listing a governed entity already knows it exists; they hold a grant on it. Telling them
+  "not yours" reveals nothing they did not already have.
+
+The test: *could this caller legitimately have known the container exists?* No → 404.
+Yes → 403.
+
+Full contract: `deny` → 404 · `own`-mismatch → 403 · state guard failed → 409.
 
 ### Negative cross-tenant test (required for policy changes)
 
-Per the IDOR rule above, add a gate-level test to `websitepublisher-tests` when touching authz:
-construct `CallerIdentity::tenant('A', …)` / `visitor` / `owner`, call the `MapiPolicyGate` methods,
-and assert scoping (tenant A sees only A, cross-tenant → 403, visitor/unknown → 404, create self-stamp,
-owner → all). Pure logic — no HTTP/DB needed.
+Per the IDOR rule above, every authz change gets a gate-level test in
+`websitepublisher-tests` asserting that a foreign tenant sees nothing. Pure logic — no HTTP
+or DB. The constructor calls and the assertions to make are in the companion.
 
 ---
 
 ## Infrastructure Reference
 
-| Resource | Value |
-|---|---|
-| Production | Clustered: **h17** (`hosting17.m25.nl`) + **h19** (`hosting19.m25.nl`), one shared database |
-| Test env | `*.test.websitepublisher.ai` |
-| CDN | `cdn.websitepublisher.ai` |
-| MCP server | `mcp.websitepublisher.ai` |
-| API gateway | `api.websitepublisher.ai` |
-| Public integration catalog | `https://www.websitepublisher.ai/integrations.txt` |
+Production is clustered: **h17** (`hosting17.m25.nl`) and **h19** (`hosting19.m25.nl`),
+one shared database, separate filesystems. Test env `*.test.websitepublisher.ai`,
+CDN `cdn.websitepublisher.ai`, MCP `mcp.websitepublisher.ai`,
+API gateway `api.websitepublisher.ai`.
 
 ### API layers
 
-| Layer | Prefix | Purpose |
-|-------|--------|---------|
-| PAPI | /papi/ | Pages & Assets |
-| MAPI | /mapi/ | Entities & Records |
-| SAPI | /sapi/ | Sessions & Forms |
-| VAPI | /vapi/ | Vault / Credentials |
-| IAPI | /iapi/ | Integrations (proxy) |
-| DAPI | /dapi/ | Dashboard |
-| WAPI | /wapi/ | WebSumo wrapper |
-| AAPI | /aapi/ | Agent API (scheduled tasks) |
-| CAPI | /capi/ | Coach API (website intake) |
-| TAPI | /tapi/ | Task API (this system) |
-| MCP  | /mcp   | Model Context Protocol server |
+`/papi/` pages & assets · `/mapi/` entities & records · `/sapi/` sessions & forms ·
+`/vapi/` vault · `/iapi/` integrations · `/tapi/` tasks · `/mcp` MCP server.
+Also present, rarely touched from here: `/dapi/` dashboard, `/wapi/` WebSumo wrapper,
+`/aapi/` scheduled tasks, `/capi/` intake.
 
 ---
 
-## MCP / TAPI Curl Testing
-
-Always include all three headers:
-
-```bash
-curl -s -X POST "https://api.websitepublisher.ai/tapi/tasks" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{...}'
-```
-
-Curl is also how you verify a tool-definition change without waiting for a new client
-session: request `tools/list` over the legacy Bearer path and read the description back.
-
----
-
-*Dev Skill version: 2.0*
+*Dev Skill version: 2.1*
 *Last updated: 22 september 2026*

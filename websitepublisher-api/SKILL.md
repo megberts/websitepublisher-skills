@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.26.0"
+   version: "3.27.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -90,6 +90,16 @@ applies plus an index of section slugs at the end. Open the sections you are abo
 with `get_skill(section: "<slug>")` — a comma-separated list fetches several at once, and
 `get_skill(section: "all")` returns the whole document. The index is a map, not the
 content: never build from slug names alone, and never assume a pattern you have not read.
+
+**Four sections are not optional.** Whatever you are building, fetch these before you write
+the first page — they decide whether the result is safe, not how it looks:
+
+    get_skill(section: "integration-first-the-decision-gate,authz-first-what-you-assemble-not-request,data-access-control-public-read-vs-policy-json,step-4-go-live-checklist")
+
+One call. Integration-First stops you rebuilding what already exists; AuthZ-First decides how
+members get in; Data Access Control is what keeps one customer's rows away from another's; the
+go-live checklist is the last gate before it is public. Before the section model these four
+loaded with every session. They still have to — the difference is that now you have to ask.
 
 If `get_skill` is not available, continue with this document.
 
@@ -903,17 +913,21 @@ Property types: `varchar`, `text`, `int`, `datetime`, `tinyint`.
 SSR uses Handlebars-inspired syntax processed server-side by the Optimizer.
 The data is embedded directly in the HTML — no JavaScript needed, fully indexable by search engines.
 
-> **SSR is public-only. Read this before using it for anything behind a login.**
-> SSR renders entities with `public_read: true` and nothing else, and its render cache
-> is keyed on website + entity — **not** on the visitor session. One shared cache serves
-> every visitor of the page, so SSR can never render data that differs per person or per
-> organisation. Use it for catalogues, blogs and other public content; for anything
-> gated, fetch client-side from a verified session.
+> **SSR renders any entity of this project — into one cache shared by every visitor.**
+> `public_read` is deliberately not checked: SSR runs inside the site, on a template the
+> owner wrote, over data the owner holds. You do not have to open `/mapi/public` just to
+> show your own data on your own page.
 >
-> If the entity is not public, the entire `wps-mapi` block is removed from the output —
-> **including the `wps-mapi-empty` branch**. You get an empty spot on the page and no
-> error anywhere. An empty block where you expected data almost always means
-> `public_read: false`, not "no records".
+> What it does not give you is per-visitor data. The render cache is keyed on website +
+> entity with **no session dimension**, so whatever SSR renders is served to everyone who
+> opens that page. Never SSR anything that differs per person or per organisation — an
+> order list, a profile, a tenant's records. Fetch that client-side from a verified session.
+>
+> The `public_read` check used to stop you doing this. It no longer does: the entity renders
+> either way. The guard is yours now.
+>
+> An empty `wps-mapi` block where you expected data means the entity name does not resolve —
+> not that the entity is private.
 
 #### Basic Syntax
 
@@ -1413,7 +1427,7 @@ above. The opening tag is `<!--#wps-mapi … -->`, the closing tag is `<!--#/wps
 | Shopping cart, wishlist | **JS** | User-specific state |
 | Product list WITH search bar | **SSR + JS** | SSR for initial load + SEO, JS for interaction |
 | Admin dashboard tables | **JS only** | No SEO needed, always behind login |
-| Anything behind a visitor or member login | **JS only** | SSR is public-only and its cache is shared per page — it can never render gated data |
+| Anything behind a visitor or member login | **JS only** | The SSR cache is keyed on website + entity with no session dimension — one render is served to every visitor |
 
 **Decision flow:**
 1. Will Google need to index this content? → Consider SSR

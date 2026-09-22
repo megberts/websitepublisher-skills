@@ -91,9 +91,10 @@ render. Check `success`.
 
 ## HTTP contract
 
-- `deny` (tier not granted the action) → **404** (no existence leak).
-- `own`-mismatch (row not owned by the caller) → **403**.
-- state guard failed → **409**.
+`deny` → 404 · `own`-mismatch → 403 · state guard failed → 409.
+
+Why those two differ, and how that squares with the IDOR rule, is in the dev skill under
+*404 or 403 — this is not a contradiction*. Not repeated here: one explanation, one place.
 
 ## `public_read` interaction
 
@@ -102,20 +103,26 @@ The implied public-read shortcut fires **only when there is no policy block**
 entirely** — grants come purely from `rules`. Sensitive entities: set the policy and keep
 `public_read: false`.
 
-## SSR is never a path for governed data
+## SSR and governed data
 
-`<!--#wps-mapi -->` server-side rendering reads **only** entities with `public_read: true`, and its
-render cache is keyed on `website_id` + entity name — **no session dimension**. One shared cache serves
-every visitor of that page.
+`<!--#wps-mapi -->` server-side rendering **does not check `public_read`**
+(`MapiSsrInjector` r.732, r.760-765, verified on h17 22-09). That was a deliberate change:
+`public_read` governs the public API, not server-side rendering, and forcing SSR through the public
+resolver made owners open `/mapi/public` just to show data on their own site. A governed entity
+therefore renders without error.
 
-That makes SSR structurally unusable for governed or tenant-scoped data, and it stays that way after
-#1310 — this is the nature of the layer, not a gap to close. Gated content is fetched client-side from
-a verified session via the SAPI execute route.
+The constraint that remains is the cache. The key is `mapi:ssr:{website_id}:{entity}` (r.740) —
+website and entity, **no session dimension**. One cache serves every visitor of that page, so SSR can
+never carry data that differs per person or per tenant, whatever the policy says. Records do pass
+through `sanitizePublicRecord`, which strips internal fields, but that is field hygiene, not
+per-viewer scoping.
 
-Side effect worth knowing: when the entity is not public the whole `wps-mapi` block is stripped from the
-output, **including the `wps-mapi-empty` branch**, and the negative result is cached for the full TTL.
-No error surfaces anywhere. An empty block where you expected data almost always means
-`public_read: false`, not "no records" (#1311).
+So: SSR for catalogues, blogs and public listings. For anything a policy governs, fetch client-side
+from a verified session via the SAPI execute route. **The difference from before is that nothing stops
+you any more** — the `public_read` check used to fail closed and no longer does.
+
+An empty `wps-mapi` block now means the entity name does not resolve, not that the entity is private
+(supersedes the earlier #1311 note).
 
 ## Enforcement boundary
 
@@ -192,12 +199,13 @@ If a request does not survive the first question, answer it with configuration a
 it — and check whether the customer-facing skill made it findable, because a request that
 should have been self-service is usually a documentation failure rather than a user error.
 
-## Negative cross-tenant test (required for policy changes)
+## Before you ship a policy
 
-Per the IDOR rule in the dev skill, add a gate-level test to `websitepublisher-tests` when touching
-authz: construct `CallerIdentity::tenant('A', …)` / `visitor` / `owner`, call the `MapiPolicyGate`
-methods, and assert scoping (tenant A sees only A, cross-tenant → 403, visitor/unknown → 404, create
-self-stamp, owner → all). Pure logic — no HTTP/DB needed.
+The negative cross-tenant test is **required** for every policy change. It lives in the dev skill
+under *Negative cross-tenant test*, next to the IDOR rule it belongs to — not duplicated here.
+
+The short version: you cannot validate a policy as owner. Read *Enforcement boundary* above before
+you trust anything you tested.
 
 ---
 
