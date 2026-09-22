@@ -557,5 +557,5 @@ session: request `tools/list` over the legacy Bearer path and read the descripti
 
 ---
 
-*Dev Skill version: 2.1*
+*Dev Skill version: 2.0*
 *Last updated: 22 september 2026*
