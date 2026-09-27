@@ -116,7 +116,7 @@ staging area and no separate deploy or publish step: every `create_page`, `updat
 and anything you publish can be found and indexed. Someone reaching for these tools is not
 sketching an idea — they are putting a site online.
 
-Three consequences, and they are not stylistic:
+Four consequences, and they are not stylistic:
 
 - **Build on the platform, not beside it.** Do not draft the site as a local file, a canvas
   or an artifact and copy it over at the end. Write pages with the tools; that *is* the
@@ -127,6 +127,11 @@ Three consequences, and they are not stylistic:
 - **Treat every write as a change to a production site.** Read a page before you overwrite
   it, prefer `patch_page` for small edits, and check the go-live checklist before telling
   someone their site is ready.
+- **Every plan has limits per project — pages, assets and entities.** `get_project_status`
+  returns them in its `plan` block. Check it before you create in bulk, and if a write
+  comes back with `limit_warnings`, tell the user straight away: the project is over its
+  plan, and the limit will be enforced. Structured data belongs in entities, not in
+  hundreds of separate pages.
 
 ---
 
@@ -339,6 +344,24 @@ If the user has not specified a style preference, choose a bold direction and co
    )
    ```
    This ensures all future sessions automatically match the same design language.
+5. **Check the plan limits:** the same `get_project_status` call returns a `plan` block:
+   ```
+   "plan": {
+     "name": "Pro",
+     "pages":    { "used": 20, "limit": 25,   "remaining": 5,   "over": false },
+     "assets":   { "used": 80, "limit": 1000, "remaining": 920, "over": false },
+     "entities": { "used": 3,  "limit": 100,  "remaining": 97,  "over": false },
+     "note": "...",
+     "upgrade_url": "https://dashboard.websitepublisher.ai/#billing"
+   }
+   ```
+   Limits apply per project. `"unlimited": true` means no limit for that resource.
+   - Planning more pages than `remaining`? Say so **before** you build, and propose an
+     alternative: one routed page over entities instead of a page per item (see
+     "Dynamic Data (MAPI)"), or an upgrade.
+   - `create_page`, `upload_asset` and `entities` (create) return `limit_warnings` when the
+     project is over its limit. The write went through for now, but not for long: pass the
+     warning on to the user and do not keep building past the limit.
 
 ### Integration-First — the decision gate
 
