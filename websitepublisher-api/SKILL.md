@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.27.0"
+   version: "3.28.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -130,7 +130,8 @@ Four consequences, and they are not stylistic:
 - **Every plan has limits per project — pages, assets and entities.** `get_project_status`
   returns them in its `plan` block. Check it before you create in bulk, and if a write
   comes back with `limit_warnings`, tell the user straight away: the project is over its
-  plan, and the limit will be enforced. Structured data belongs in entities, not in
+  plan, and the limit will be enforced. At 5x the limit, creating more is blocked (402);
+  editing existing content keeps working. Structured data belongs in entities, not in
   hundreds of separate pages.
 
 ---
