@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.28.0"
+   version: "3.28.3"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -130,8 +130,9 @@ Four consequences, and they are not stylistic:
 - **Every plan has limits per project — pages, assets and entities.** `get_project_status`
   returns them in its `plan` block. Check it before you create in bulk, and if a write
   comes back with `limit_warnings`, tell the user straight away: the project is over its
-  plan, and the limit will be enforced. At 5x the limit, creating more is blocked (402);
-  editing existing content keeps working. Structured data belongs in entities, not in
+  plan, and the limit will be enforced. On the Free plan, creating stops at the limit (402);
+  on paid plans at 5x the limit. Editing existing content keeps working. Executables and
+  scripts (.exe, .cmd, .sh, .apk …) cannot be uploaded on Free. Structured data belongs in entities, not in
   hundreds of separate pages.
 
 ---
@@ -2031,6 +2032,7 @@ integrations only.
 | Quote / offerte request via the cart, **no online payment** | Checkout-flow **invoice mode** (see note below) |
 | SMS confirmation after booking | Twilio integration |
 | Store leads from multiple forms | Built-in Lead Capture |
+| Leads from a Google Sheet, kept in sync (connect Google once, no passwords) | `google` + `google_sync` — paid plans |
 | Password-protected admin dashboard | Admin Auth (IAPI admin session) |
 | Open member area (anyone with an email may enrol) | SAPI Visitor Auth |
 | Provisioned / paid / multi-tenant member portal | Tenant Auth (IAPI) — see "Tenant-Protected Pages" |
@@ -2408,5 +2410,5 @@ https://www.websitepublisher.ai/skills/websitepublisher-dev/SKILL.md
 ### Full Documentation
 https://www.websitepublisher.ai/docs
 
-### MCP Setup (for Claude Desktop, Cursor, Windsurf, GitHub Copilot)
+### MCP Setup (for Claude Desktop, Cursor, Devin Desktop, GitHub Copilot)
 https://www.websitepublisher.ai/docs/mcp
