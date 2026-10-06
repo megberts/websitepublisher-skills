@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.28.3"
+   version: "3.28.5"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -214,7 +214,7 @@ Before doing anything, verify the user is connected to WebsitePublisher.ai.
 
 > "To build your website I need to connect to WebsitePublisher.ai. All you need is your email address — I'll guide you through the rest. It takes about 30 seconds."
 
-Direct the user to sign in at: **https://www.websitepublisher.ai/dashboard**
+Direct the user to sign in at: **https://dashboard.websitepublisher.ai/**
 After signing in, they return here and you continue from Step 2.
 
 ---
@@ -1603,7 +1603,7 @@ configure_form(
     service: "resend",
     endpoint: "send-email",
     input_template: {
-      from: "noreply@websitepublisher.ai",
+      from: "noreply@your-domain.com",
       to: "owner@example.com",
       subject: "New contact from {{fields.name}}",
       html: "<p>From: {{fields.name}} ({{fields.email}})</p><p>{{fields.message}}</p>"
@@ -1612,6 +1612,9 @@ configure_form(
   max_submits_per_session: 5
 )
 ```
+
+`from` must be an address on a domain verified in the project's own Resend account —
+never an `@websitepublisher.ai` address.
 
 ### Step 2 — Add the CDN script + form handler to the page
 
@@ -1865,6 +1868,15 @@ For transactional mail (OTP, order confirmations) from such a domain, the two wo
 options are: transfer the domain to WebsitePublisher, or configure the project's own
 Resend key in the vault and send through that. The second also gives the owner their own
 delivery dashboard.
+
+### Email to site visitors
+
+Mail a site sends to its own visitors (booking confirmations, transactional templates) goes
+through the project's **own** mail provider in the vault. The platform sender is reserved for
+authentication and is never used as a fallback. Without a provider the action itself still
+succeeds (the booking is made) but no email is sent, so set one up before such a flow goes
+live. Booking emails take their language and branding from the project email layout
+(`email_layout`).
 
 ## Platform Knowledge
 
@@ -2375,7 +2387,8 @@ only go stale. Over MCP the same call is
 
 Resource types (chair, table, room), what a booking does to the calendar, and the
 visitor-facing booking flow come from `get_integration_schema(service: "calendar")` in the
-`guidance` block.
+`guidance` block. Booking emails follow **Email to site visitors** above; the `email` field
+in the `book` / `cancel-booking` response tells you whether one was sent.
 
 ### Key SAPI Endpoints (visitor-facing, no bearer token)
 ```
