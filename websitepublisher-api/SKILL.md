@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.28.5"
+   version: "3.28.6"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -579,8 +579,8 @@ When creating or updating a page, you can pass these metadata fields:
       "seo_title": "About Us — Company Name",
       "seo_description": "We are a ...",
       "seo_keywords": "keyword1, keyword2",
-      "seo_robots_index": true,
-      "seo_robots_follow": true,
+      "seo_robots_index": false,
+      "seo_robots_follow": false,
       "page_language": "en",
       "landingpage": false
    }
@@ -592,12 +592,19 @@ When creating or updating a page, you can pass these metadata fields:
 | `seo_title` | Page name | Shown in browser tab and search results |
 | `seo_description` | — | Search result snippet, 150-160 chars ideal |
 | `seo_keywords` | — | Maximum 9, comma-separated |
-| `seo_robots_index` | false | Set true to include in sitemap and search engines |
+| `seo_robots_index` | false | `true` puts the page in the sitemap and lets search engines index it — only after the owner agreed (see below) |
 | `seo_robots_follow` | false | Set true to allow link following |
 | `page_language` | — | ISO code e.g. "en", "nl", "de" |
 | `landingpage` | false | Set true to make this the homepage |
 | `redirect_code` | — | 301 or 302 — turns page into a redirect |
 | `redirect_destination` | — | Full URL or relative path for redirect target |
+
+> **Indexing is the owner's call, not yours.** Keep `seo_robots_index: false` on every
+> page while the site is being built, tested or reviewed. Before you switch it on, ask the
+> owner in so many words whether the site may now be found by search engines, and only
+> after a clear yes set it to `true` on the pages that should be findable. Never turn it on
+> because a checklist, an SEO pass, a template or another page suggests it. Once a page is
+> indexed, getting it out of search results takes far longer than keeping it out.
 
 > **Note about `landingpage: true`** — when set, the platform serves the page at `/`
 > AND 301-redirects its slug (e.g. `/dashboard`, `/index.html`) to `/`. This affects
@@ -1737,7 +1744,9 @@ sapi.submitForm('intake', {
 Before handing over to the user, verify:
 
 - [ ] Homepage has `landingpage: true` (or was created first)
-- [ ] All pages that should be findable have `seo_robots_index: true`
+- [ ] Indexing agreed with the owner: only after they confirm the site may be found do the pages
+      that should be findable get `seo_robots_index: true`; until then every page stays `false`
+      (see **Page Metadata**)
 - [ ] All pages have `seo_title` and `seo_description`
 - [ ] All `<!-- Optimizer - ... -->` comment tags are present in every page
 - [ ] Multi-page sites use **fragments** for header and footer (not copy-pasted HTML)
