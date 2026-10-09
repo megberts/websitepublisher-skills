@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.28.6"
+   version: "3.28.7"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -613,6 +613,31 @@ When creating or updating a page, you can pass these metadata fields:
 >
 > Common pitfall: after admin login, `replace('/dashboard')` loops if `/dashboard`
 > is `landingpage: true`. Use `replace('/')` instead.
+
+### Same-Origin Static Files — `content_type`
+
+A service worker, Android Digital Asset Links (`/.well-known/assetlinks.json`) and a web
+app manifest only work when served from the site's **own origin** — browsers and
+Android's verifier refuse them from the CDN. That is why these are **pages, not assets**:
+give the page the file's slug and an explicit `content_type`, and its content is the raw
+JavaScript or JSON, not HTML.
+
+```
+create_page(project_id: 12345, slug: "service-worker.js",
+  content_type: "text/javascript", content: "self.addEventListener('install', …)")
+```
+
+| File | Slug | `content_type` |
+|---|---|---|
+| Service worker | `service-worker.js` or `sw.js` | `text/javascript` |
+| Digital Asset Links | `.well-known/assetlinks.json` | `application/json` |
+| Web app manifest | `manifest.webmanifest` | `application/manifest+json` |
+
+The value is bound to the slug extension and HTML pages cannot be overridden — the
+`content_type` parameter description on `create_page` / `update_page` lists exactly what
+is accepted. Works on the project subdomain and on a connected custom domain alike;
+register the worker as `navigator.serviceWorker.register('/service-worker.js')` and scope
+`/` is automatic. `update_page` with `content_type: null` turns it back into an HTML page.
 
 ### Visual Editor (WPE) — Edit Without AI
 
