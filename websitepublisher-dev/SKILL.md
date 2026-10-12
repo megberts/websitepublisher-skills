@@ -8,7 +8,8 @@ description: >
 license: MIT
 metadata:
   author: websitepublisher-ai
-  version: "2.1"
+  version: "2.1.1"
+  # versioning: semver (patch = correction, minor = new content, major = structure)
   website: https://www.websitepublisher.ai
   docs: https://www.websitepublisher.ai/docs
   mcp: https://mcp.websitepublisher.ai
