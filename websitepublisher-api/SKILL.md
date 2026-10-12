@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.29.0"
+   version: "3.30.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -2298,6 +2298,12 @@ anything not listed is never returned, so a private column cannot leak by accide
 
 Works with a verified **Visitor Auth** session and with a **Tenant Auth** member session.
 
+A member can also **change** their own details: **account/update-profile** writes back to the
+same source, under the same server-side identity. Mark the source that holds the profile as
+writable and list exactly which columns a member may change — everything else stays readable
+but untouchable. The column the row is matched on is never one of them, so a member cannot
+rewrite their own identity and hand the record to someone else.
+
 Configuration, the browser flow and anti-patterns come from
 `get_integration_schema(service: "account")` in the `guidance` block.
 
@@ -2307,9 +2313,11 @@ Configuration, the browser flow and anti-patterns come from
 a team wiki, an internal project log, shared documentation that several named members read
 together. That is what the `records` integration is for.
 
-It reads a MAPI entity under the identity the session already established, and the entity's
-`policy_json` decides which rows come back and which fields are stripped. The browser never
-sends an identity, so there is nothing to tamper with.
+It reads and writes a MAPI entity under the identity the session already established, and the
+entity's policy decides which rows come back, which fields are stripped, and whether this
+member may create, update or delete at all. The browser never sends an identity, so there is
+nothing to tamper with: on create the owner is stamped from the session, and on update it
+cannot be changed — a row can never leave the member or the organisation it belongs to.
 
 Requirements, the policy shape, the browser call, the guards and anti-patterns come from
 `get_integration_schema(service: "records")` in the `guidance` block.
