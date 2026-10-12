@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.30.0"
+   version: "3.30.1"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -2314,8 +2314,8 @@ a team wiki, an internal project log, shared documentation that several named me
 together. That is what the `records` integration is for.
 
 It reads and writes a MAPI entity under the identity the session already established, and the
-entity's policy decides which rows come back, which fields are stripped, and whether this
-member may create, update or delete at all. The browser never sends an identity, so there is
+entity's **policy_json** decides which rows come back, which fields are stripped, and whether
+this member may create, update or delete at all. The browser never sends an identity, so there is
 nothing to tamper with: on create the owner is stamped from the session, and on update it
 cannot be changed — a row can never leave the member or the organisation it belongs to.
 
