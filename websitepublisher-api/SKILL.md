@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.28.7"
+   version: "3.29.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -836,6 +836,32 @@ upload_asset(
   content_text: "body { font-family: 'Inter', sans-serif; }"
 )
 ```
+
+#### Private Files (paid plans)
+
+Assets are public by default. A file the owner does not want on the open web (a customer
+list, an export, an internal document) can be stored as a **private asset** instead: add
+**private: true** to **upload_asset**. It stays off the CDN: no public URL, not served on
+the site, not usable in a page.
+
+```
+upload_asset(project_id: 12345, slug: "lists/customers.csv", content_text: "...", private: true)
+get_asset(project_id: 12345, slug: "lists/customers.csv")
+-> content, plus a download_url that works for 5 minutes
+```
+
+- **list_assets** shows it with is_private: true and url: null. **delete_asset** removes it
+  and ends its share links.
+- To replace it, upload again with private: true and overwrite: true. **patch_asset** does
+  not work on private files.
+- To move a file between public and private, or to share it with an expiring, revocable
+  link, use the **private-assets** integration. Read its guidance first:
+  get_integration_schema(project_id, "private-assets").
+- Private files count toward the plan's asset and storage limits.
+
+Private assets are the **owner's** files. Files that signed-in members download on the
+site belong in **gated-files**. Never put a download_url or a share link in a page: both
+expire, and a share link is meant for one recipient.
 
 #### Managing Existing Assets
 
