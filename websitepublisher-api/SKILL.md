@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.30.2"
+   version: "3.30.3"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -2110,6 +2110,8 @@ integrations only.
 | Provisioned / paid / multi-tenant member portal | Tenant Auth (IAPI) — see "Tenant-Protected Pages" |
 | Private file delivery to members (ebooks, paid PDFs) | `gated-files` — see "Member File Downloads" |
 | Signed-in member reads/updates their own record ("My Account") | `account` — see "Member Self-Profile" |
+| Approve a private file, then publish a copy (price list, policy JSON) | private-assets: promote (the original stays private) |
+| AI step on the server: hidden instructions, private files as knowledge, validated JSON answer | private-ai (owner, admin page or server flow; never visitors) |
 | Remember design choices across sessions | Site Context integration |
 | Import 50-500 products at once | `bulk-upsert-products` (Product Catalog) |
 | Upload images from admin panel (browser) | **Asset Proxy** (PAPI assets) or **SAPI upload** (form uploads) |
