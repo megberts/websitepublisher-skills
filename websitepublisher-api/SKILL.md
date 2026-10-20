@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.30.3"
+   version: "3.31.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1194,7 +1194,7 @@ When a visitor opens `/product/wireless-headphones`, the router recognises the
 page at `/product` as routed, takes `wireless-headphones` as the route segment,
 and resolves it against the entity. `record=":slug"` always takes the **last URL
 segment** as the match value. An unknown slug returns a real **404** on a
-`mapi`-routed page; on a `catalog` route it still falls into the `-empty`
+`mapi`- or `blog`-routed page; on a `catalog` route it still falls into the `-empty`
 branch (see `route_mandatory` below).
 
 #### Creating a routed page
@@ -1217,7 +1217,7 @@ create_page(
 | Parameter | Meaning |
 |---|---|
 | `route_entity` | Entity to resolve one record from. Setting it turns the route **on**; sending an empty string on `update_page` turns it **off**. |
-| `route_source` | `"mapi"` for your own entities, `"catalog"` for the built-in webshop. Omit to auto-detect — but catalog wins for the reserved names `products` and `categories`, so set it explicitly if your own MAPI entity has one of those names. |
+| `route_source` | `"mapi"` for your own entities, `"catalog"` for the built-in webshop, `"blog"` for published posts of the built-in blog integration (with `route_entity: "posts"`, see below). Omit to auto-detect — but catalog wins for the reserved names `products` and `categories`, so set it explicitly if your own MAPI entity has one of those names. |
 | `route_match` | Record field the URL segment matches. Defaults to `slug`. |
 | `route_mandatory` | See the trade-off below. Defaults to `false`. |
 
@@ -1227,9 +1227,16 @@ create_page(
 > `/products/_template.html` — the router never looks at it and no route is set.
 > Use a clean slug: no underscore prefix, no `.html`, no `/`.
 
+> **An existing `.html` page can be routed too.** Route `article.html` and it serves
+> both `/article/{record}` and `/article.html/{record}`; the canonical URL and the
+> sitemap use the clean `/article/{record}`. The bare `article.html` keeps working, so
+> links that carry the record in a query string (`article.html?slug=...`) stay intact
+> as long as `route_mandatory` is `false`. Prefer this over creating a second page
+> when the plan's page limit is tight.
+
 > **⚠️ `route_mandatory` no longer decides whether an unknown record 404s.**
 > Since the routing change of 2026-09-09, a URL segment that resolves to nothing
-> **always** returns a real 404 when `route_source` is `mapi` — regardless of this
+> **always** returns a real 404 when `route_source` is `mapi` or `blog` — regardless of this
 > flag. What is left for `route_mandatory` is narrower and simpler:
 > - `true` → the bare `/product` (no segment at all) is **404**. Use this for pure
 >   detail pages that have no index of their own.
@@ -1251,6 +1258,56 @@ returns the current `routing` block (`enabled`, `mandatory`, `source`, `entity`,
 the route but leaves `version` and `version_hash` untouched — nothing about the
 content changed. Consequence: `rollback_page` restores content, never a routing
 configuration. Write the route down if it matters.
+
+#### Routed pages on blog posts — `route_source: "blog"`
+
+Posts of the built-in **blog** integration (written with `blog/create-post`, read
+with `blog/get-post`) are not a MAPI entity, but a routed page serves them directly:
+server-rendered, per-post SEO, no mirror entity needed.
+
+```
+update_page(
+  project_id: 12345,
+  slug: "article",              // or an existing "article.html"
+  route_source: "blog",
+  route_entity: "posts",        // the only entity of the blog source
+  route_match: "slug",          // posts resolve on their slug
+  route_mandatory: false        // the bare page keeps working (index or ?slug= reader)
+)
+```
+
+- Only **published** posts whose `published_at` has passed resolve. Drafts, posts
+  scheduled for later and unknown slugs return a real **404**.
+- Fields: `title`, `slug`, `content` (HTML, render it with `{{{content}}}`), `excerpt`,
+  `featured_image`, `images`, `author_name`, `category_name`, `category_slug`, `tags`,
+  `published_at`, `meta_title`, `meta_description`.
+- Published posts appear in the sitemap as `/article/{slug}`.
+- A list block with `source="blog" entity="posts"` renders published posts, newest
+  first, with list fields only (no `content`).
+
+Give both tags the blog source explicitly:
+
+```html
+<!--#wps-seo source="blog" entity="posts" record=":slug" match="slug"
+     title="{{title}} — Site Name"
+     description="{{excerpt | striptags | truncate:160}}" -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{title}}">
+  <meta property="og:description" content="{{excerpt | striptags | truncate:200}}">
+  <meta property="og:image" content="{{featured_image}}">
+<!--#/wps-seo -->
+
+<!--#wps-mapi source="blog" entity="posts" record=":slug" match="slug" -->
+  <h1>{{title}}</h1>
+  {{{content}}}
+<!--#wps-mapi-empty -->
+  <!-- bare URL: the index, or a client-side reader -->
+<!--#/wps-mapi -->
+```
+
+> If the page already loads posts client-side from `?slug=`, let the script fall back
+> to the last path segment so the clean URL works too:
+> `new URLSearchParams(location.search).get('slug') || location.pathname.split('/').filter(Boolean).pop()`
 
 #### Dynamic Routed Pages (detail + related list)
 
