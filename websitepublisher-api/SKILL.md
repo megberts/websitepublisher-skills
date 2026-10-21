@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.31.0"
+   version: "3.32.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -116,7 +116,7 @@ staging area and no separate deploy or publish step: every `create_page`, `updat
 and anything you publish can be found and indexed. Someone reaching for these tools is not
 sketching an idea — they are putting a site online.
 
-Four consequences, and they are not stylistic:
+Five consequences, and they are not stylistic:
 
 - **Build on the platform, not beside it.** Do not draft the site as a local file, a canvas
   or an artifact and copy it over at the end. Write pages with the tools; that *is* the
@@ -134,6 +134,14 @@ Four consequences, and they are not stylistic:
   on paid plans at 5x the limit. Editing existing content keeps working. Executables and
   scripts (.exe, .cmd, .sh, .apk …) cannot be uploaded on Free. Structured data belongs in entities, not in
   hundreds of separate pages.
+- **Read the `warnings` in every write response and fix what they report.** A page or
+  fragment write can come back with a `warnings` list next to `success`. The write
+  succeeded and the page is live, so a warning describes a defect visitors can see now.
+  Entries of type `lint` name it and say how to fix it: a missing viewport tag or `<h1>`,
+  images without `alt`, placeholder text, double-escaped quotes (`class=\"x\"`), an include
+  of a fragment that does not exist. Fix them straight away with `patch_page` or the
+  fragment tool before moving on. Entries of type `sanitization` mean the platform already
+  repaired your input (for example double-encoded JSON): send clean content next time.
 
 ---
 
