@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.32.0"
+   version: "3.33.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -1389,10 +1389,13 @@ failure mode). No `$` token present → no-op.
 - **Never wrap an SSR loop in `{{#if}}`.** Same reason. Use the native
   match/empty branch split shown above.
 
-**Prerequisite — filterable field must be top-level.** Filters only match
-top-level keys. To filter products on category slug, the catalog normalizer must
-expose `category_slug` top-level on each product (it does for `source=catalog`).
-A field that only exists nested (e.g. `category.slug`) is not filterable.
+**Nested fields — dot paths.** `filter` and `sort` keys can point into a nested
+field with a dot path: `filter="metadata.bestseller:1"`, `sort="metadata.rank:asc"`,
+`filter="category.slug:shoes"`. A JSON text field of a MAPI entity is read the same
+way. A key that exists as-is on the record wins, so existing filters keep working.
+A record where the path is missing (or ends in a list or object) does not match the
+filter and sorts as empty. At most 6 levels deep. Catalog products also expose
+`category_slug` top-level (`source=catalog`).
 
 #### Per-Record SEO — `<!--#wps-seo -->` (routed detail pages)
 
@@ -1738,6 +1741,44 @@ configure_form(
 
 `from` must be an address on a domain verified in the project's own Resend account —
 never an `@websitepublisher.ai` address.
+
+**Thank-you page.** `redirect_url: "/thanks"` (a path on the site, or a full https://
+URL, max 255 characters) is returned to the page after a successful submit as
+`data.redirect_url`; a redirect from an action (such as a payment checkout) goes first.
+Omit it on a later `configure_form` to keep the stored value; `""` removes it.
+
+**Server-side field rules (optional).** Browser validation (`type="email"`,
+`maxlength`, a `<select>`) is easy to bypass. Add `field_rules` so the server checks
+the values before any action runs:
+
+```
+configure_form(
+  ...,
+  field_rules: {
+    fields: {
+      email:   { type: "email" },
+      name:    { min_length: 2, max_length: 100 },
+      message: { max_length: 5000 },
+      service: { enum: ["web", "seo", "ads"] },
+      budget:  { type: "integer", min: 0 }
+    },
+    unknown_fields: "reject",   // allow (default) | drop | reject
+    max_body_bytes: 20000
+  }
+)
+```
+
+- Types: `string` (default), `email`, `url`, `integer`, `number`, `boolean`, and `array`
+  for multi-selects (`enum`, `min_items`, `max_items`). Lengths count characters.
+- A rule only checks a field that has a value; presence stays `required_fields`.
+- `unknown_fields`: fields without a rule and not in `required_fields` are kept
+  (`allow`), removed before the actions run (`drop`) or refused (`reject`). The honeypot
+  `website` always passes.
+- A refused submit gets **422** with `error.field_errors: [{ field, rule, message }]`
+  (the submitted value is never echoed back) and nothing is stored or sent. Over
+  `max_body_bytes` gets **413**. Show each message next to its field.
+- Omitting `field_rules` on a later `configure_form` keeps the stored rules;
+  `field_rules: {}` removes them. An unknown rule name is refused when you configure.
 
 ### Step 2 — Add the CDN script + form handler to the page
 
@@ -2175,6 +2216,7 @@ integrations only.
 | Provisioned / paid / multi-tenant member portal | Tenant Auth (IAPI) — see "Tenant-Protected Pages" |
 | Private file delivery to members (ebooks, paid PDFs) | `gated-files` — see "Member File Downloads" |
 | Signed-in member reads/updates their own record ("My Account") | `account` — see "Member Self-Profile" |
+| Multi-step process with states and history (application, intake, approval) | `flow_framework` — pass an `idempotency_key` on `submit_step` / `advance` so a double click or retry is applied once; a signed-in visitor lists their own flows with `list_my_instances` |
 | Approve a private file, then publish a copy (price list, policy JSON) | private-assets: promote (the original stays private) |
 | AI step on the server: hidden instructions, private files as knowledge, validated JSON answer | private-ai (owner, admin page or server flow; never visitors) |
 | Remember design choices across sessions | Site Context integration |
