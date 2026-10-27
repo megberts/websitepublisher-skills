@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.33.0"
+   version: "3.34.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -2173,6 +2173,29 @@ and the two reasons a result looks empty when it is not — comes from
 
 API keys are **never exposed** to the AI or the browser. The Vault encrypts them at rest
 and the integration proxy resolves them server-side at execution time.
+
+### Keys the user does not want to paste in the chat
+
+When the user already has a key (OpenAI, Resend, Stripe, ...) but prefers not to paste it
+here, or your client refuses credential fields, give them the vault link instead of asking
+for the value:
+
+```
+https://dashboard.websitepublisher.ai/vault?project=<project_id>&service=<service>&key=<key_name>&purpose=<short reason>
+```
+
+- `service`: resend, stripe, mollie, mailgun, sendgrid, smtp, twilio, anthropic or openai.
+  Anything else opens the Custom form.
+- `key`: the vault key name the integration expects, e.g. `openai_api_key`. Services with
+  several fields (mailgun, smtp, twilio) fill in their own names and ignore `key`.
+- `purpose`: plain text, max 200 characters, URL-encoded. The user sees it as "the link says
+  it is for ...", so say plainly what the key is for.
+- The user signs in if needed, the form opens prefilled for that project, they paste the key
+  and save. If the key name already exists, the link opens Replace instead. The link holds
+  no secret and only works for a project the signed-in user can open.
+- Afterwards, check with `vault_list_secrets` that the key name is there (you see names and
+  prefixes, never values), then continue with the integration.
+- Once the user has chosen the link, never ask for the value in the chat.
 
 ### Vault References — `{{vault:...}}`
 
