@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.34.0"
+   version: "3.35.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -2069,6 +2069,39 @@ live. Booking emails take their language and branding from the project email lay
 | Third-party integrations | IAPI + VAPI |
 | Visual editing (browser) | WPE |
 | Clone a website | WAPI clone endpoint |
+| Visitor analytics (read) | MCP `get_analytics` / SAPI `/analytics/*` |
+
+### Visitor analytics — built in, read it, don't rebuild it
+
+Every site counts its own page views: no tracking script to add and nothing to configure.
+Do not build a view counter of your own (an entity incremented from page JavaScript):
+it duplicates what the platform already counts and is easy to inflate. Want counts per article? Give each article its own
+page or routed URL; numbers are kept per page slug. Third-party analytics (Google Analytics,
+Plausible, …) are added with `set_tracking_scripts`, only when the user asks for them.
+
+**Reading the numbers** — MCP `get_analytics(project_id, metric, period, timezone)`, or from
+an admin panel `GET /sapi/project/{id}/analytics/{summary|pageviews|referrers|devices|utm|trend}`
+with the owner's `wsa_` session (its own website only) or a `wpa_` / `wps_` key, with the same
+query parameters:
+
+- `period`: `today`, `7d`, `30d`, `90d`, `range` with `from` + `to` (YYYY-MM-DD, at most
+  366 days), or `all` (everything recorded; not for `trend`).
+- `timezone`: an IANA name such as `Europe/Amsterdam`. Without it, days run from server
+  midnight (UTC). When the user talks about "today" or "yesterday", pass their timezone.
+- Builder and preview views are never counted.
+
+**Every response carries `meta` — read it before you report numbers:**
+
+| Field | What it tells you |
+|---|---|
+| `from`, `to`, `timezone` | The exact window that was counted |
+| `unique_visitors_basis` | `single_day`: the unique visitors of that one day. `multi_day`: a visitor without a site session gets a new anonymous id each day, so one person can count once per day. Say so; do not call it "unique people" |
+| `counting` | `browser`: counted in the visitor's browser, including pages served from the cache; visitors without JavaScript and automated browsers are not counted. `server_render`: counted when the server renders the page; views served from the cache are missing, so the numbers are a lower bound |
+| `notes` | Plain-language caveats for this answer: pass them on |
+| `tracking_started_at` | With `period: "all"`: the first recorded view |
+
+A served page may contain a small script marked `data-wp-pv`: the platform adds it when
+views are counted in the browser. Leave it alone and do not copy it into page content.
 
 ---
 
