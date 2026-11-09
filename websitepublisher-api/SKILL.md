@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.35.0"
+   version: "3.36.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -637,7 +637,7 @@ create_page(project_id: 12345, slug: "service-worker.js",
 
 | File | Slug | `content_type` |
 |---|---|---|
-| Service worker | `service-worker.js` or `sw.js` | `text/javascript` |
+| Service worker | `sw.js`, `service-worker.js` or any name ending in `sw.js` / `worker.js` | `text/javascript` |
 | Digital Asset Links | `.well-known/assetlinks.json` | `application/json` |
 | Web app manifest | `manifest.webmanifest` | `application/manifest+json` |
 
@@ -646,6 +646,14 @@ The value is bound to the slug extension and HTML pages cannot be overridden —
 is accepted. Works on the project subdomain and on a connected custom domain alike;
 register the worker as `navigator.serviceWorker.register('/service-worker.js')` and scope
 `/` is automatic. `update_page` with `content_type: null` turns it back into an HTML page.
+
+**Worker file names on a custom domain.** A JavaScript page is served from the site's own
+origin when its file name ends in `sw.js` or `worker.js`, at the root or in a folder: for
+example `sw.js`, `service-worker.js`, `OneSignalSDKWorker.js`,
+`push/onesignal/OneSignalSDKWorker.js` or `firebase-messaging-sw.js`. The default worker
+names of push providers already match, so keep the provider's default path. Other `.js`
+names work on the project subdomain but return 404 on a custom domain; serve shared
+scripts as assets from the CDN instead.
 
 ### Visual Editor (WPE) — Edit Without AI
 
