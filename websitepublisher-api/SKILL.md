@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.38.0"
+   version: "3.39.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -131,16 +131,19 @@ Five consequences, and they are not stylistic:
   `get_project_status` returns them in its `plan` block. Check it before you create in
   bulk. On every plan, creating stops at the limit (402); editing and replacing what
   already exists keeps working. If a write comes back with `limit_warnings`, tell the user
-  straight away. When a limit is in the way, tell the user and offer the upgrade. **Never
-  delete the user's pages, files or data to make room unless the user asks for it and
-  confirms which items may go.** Executables, scripts and archives (.exe, .cmd, .sh, .apk,
+  straight away. When a limit is in the way, give the user the two ways forward: upgrade,
+  or clean up what they no longer need. **Cleaning up is the user's choice: delete only the
+  items the user confirms, never on your own to make room.** Executables, scripts and
+  archives (.exe, .cmd, .sh, .apk,
   .zip …) cannot be uploaded on Free. Structured data belongs in entities, not in hundreds
   of separate pages. Details: the `project-setup` section.
 - **Integrations count toward the plan too.** The `integration-plan` integration (get-usage)
-  shows how many the project uses against its plan. Over the limit: tell the user and offer
-  the upgrade, or let the owner choose which integrations stay active (set-active; it
-  deletes nothing). **Never remove integrations to get under the limit:** removing deletes
-  their stored keys, and a removed integration keeps counting for 30 days.
+  shows how many the project uses against its plan. Over the limit, the integrations beyond
+  the plan are switched off after a notice period; nothing is deleted. Give the user the
+  ways forward: upgrade, choose which integrations stay active (set-active; deletes
+  nothing), or remove the ones they no longer need. Removing is the user's choice and only
+  for integrations they confirm: it deletes the stored keys, and a removed integration
+  keeps counting for 30 days before its slot frees up.
 - **Read the `warnings` in every write response and fix what they report.** A page or
   fragment write can come back with a `warnings` list next to `success`. The write
   succeeded and the page is live, so a warning describes a defect visitors can see now.
@@ -382,8 +385,8 @@ If the user has not specified a style preference, choose a bold direction and co
    - **When a limit is in the way:**
      - Tell the user the numbers from the `plan` block and offer the upgrade
        (`upgrade_url`). That is the whole picture: there is no margin above the limit,
-       going over is never billed, and the only way past the limit is an upgrade by the
-       owner.
+       going over is never billed. The ways forward are an upgrade, or the owner cleaning up
+       what they no longer need.
      - Make room without deleting: replace a file instead of adding one (`upload_asset`
        with `overwrite: true` on a path that already exists, or `patch_asset` for text).
        Replacing does not count as a new asset; a new path does.
