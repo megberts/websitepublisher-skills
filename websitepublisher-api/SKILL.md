@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.36.0"
+   version: "3.37.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -127,13 +127,15 @@ Five consequences, and they are not stylistic:
 - **Treat every write as a change to a production site.** Read a page before you overwrite
   it, prefer `patch_page` for small edits, and check the go-live checklist before telling
   someone their site is ready.
-- **Every plan has limits per project — pages, assets and entities.** `get_project_status`
-  returns them in its `plan` block. Check it before you create in bulk, and if a write
-  comes back with `limit_warnings`, tell the user straight away: the project is over its
-  plan, and the limit will be enforced. On the Free plan, creating stops at the limit (402);
-  on paid plans at 5x the limit. Editing existing content keeps working. Executables and
-  scripts (.exe, .cmd, .sh, .apk …) cannot be uploaded on Free. Structured data belongs in entities, not in
-  hundreds of separate pages.
+- **Every plan has limits per project — pages, assets, storage and entities.**
+  `get_project_status` returns them in its `plan` block. Check it before you create in
+  bulk. On every plan, creating stops at the limit (402); editing and replacing what
+  already exists keeps working. If a write comes back with `limit_warnings`, tell the user
+  straight away. When a limit is in the way, tell the user and offer the upgrade. **Never
+  delete the user's pages, files or data to make room unless the user asks for it and
+  confirms which items may go.** Executables, scripts and archives (.exe, .cmd, .sh, .apk,
+  .zip …) cannot be uploaded on Free. Structured data belongs in entities, not in hundreds
+  of separate pages. Details: the `project-setup` section.
 - **Read the `warnings` in every write response and fix what they report.** A page or
   fragment write can come back with a `warnings` list next to `success`. The write
   succeeded and the page is live, so a warning describes a defect visitors can see now.
@@ -362,7 +364,7 @@ If the user has not specified a style preference, choose a bold direction and co
      "assets":   { "used": 80, "limit": 1000, "remaining": 920, "over": false },
      "entities": { "used": 3,  "limit": 100,  "remaining": 97,  "over": false },
      "note": "...",
-     "upgrade_url": "https://dashboard.websitepublisher.ai/#billing"
+     "upgrade_url": "https://dashboard.websitepublisher.ai/billing"
    }
    ```
    Limits apply per project. `"unlimited": true` means no limit for that resource.
@@ -370,8 +372,23 @@ If the user has not specified a style preference, choose a bold direction and co
      alternative: one routed page over entities instead of a page per item (see
      "Dynamic Data (MAPI)"), or an upgrade.
    - `create_page`, `upload_asset` and `entities` (create) return `limit_warnings` when the
-     project is over its limit. The write went through for now, but not for long: pass the
-     warning on to the user and do not keep building past the limit.
+     project is over its limit. The write went through, but creating more is blocked from
+     here on: pass the warning on to the user and do not keep building past the limit.
+   - **When a limit is in the way:**
+     - Tell the user the numbers from the `plan` block and offer the upgrade
+       (`upgrade_url`). That is the whole picture: there is no margin above the limit,
+       going over is never billed, and the only way past the limit is an upgrade by the
+       owner.
+     - Make room without deleting: replace a file instead of adding one (`upload_asset`
+       with `overwrite: true` on a path that already exists, or `patch_asset` for text).
+       Replacing does not count as a new asset; a new path does.
+     - Removing content is the user's decision. You may list candidates (files that no
+       page, fragment or stylesheet refers to); delete only what the user confirms by name.
+     - A deleted page or public file leaves the count at once and stays in the project
+       trash for 30 days. The owner restores it in the dashboard (AI activity, Deleted tab;
+       paid plans), not through the API. A restore counts again, so it needs room under the
+       limit: the trash is a safety net for mistakes, not a way to free space for a while.
+       Private files are deleted at once and cannot be restored.
 
 ### Integration-First — the decision gate
 
