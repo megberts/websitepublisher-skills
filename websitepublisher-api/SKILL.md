@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.37.0"
+   version: "3.38.0"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -136,6 +136,11 @@ Five consequences, and they are not stylistic:
   confirms which items may go.** Executables, scripts and archives (.exe, .cmd, .sh, .apk,
   .zip …) cannot be uploaded on Free. Structured data belongs in entities, not in hundreds
   of separate pages. Details: the `project-setup` section.
+- **Integrations count toward the plan too.** The `integration-plan` integration (get-usage)
+  shows how many the project uses against its plan. Over the limit: tell the user and offer
+  the upgrade, or let the owner choose which integrations stay active (set-active; it
+  deletes nothing). **Never remove integrations to get under the limit:** removing deletes
+  their stored keys, and a removed integration keeps counting for 30 days.
 - **Read the `warnings` in every write response and fix what they report.** A page or
   fragment write can come back with a `warnings` list next to `success`. The write
   succeeded and the page is live, so a warning describes a defect visitors can see now.
