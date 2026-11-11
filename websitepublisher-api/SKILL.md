@@ -19,7 +19,7 @@ description: >
 license: MIT
 metadata:
    author: websitepublisher-ai
-   version: "3.39.0"
+   version: "3.39.1"
    website: https://www.websitepublisher.ai
    docs: https://www.websitepublisher.ai/docs
    mcp: https://mcp.websitepublisher.ai
@@ -116,7 +116,7 @@ staging area and no separate deploy or publish step: every `create_page`, `updat
 and anything you publish can be found and indexed. Someone reaching for these tools is not
 sketching an idea — they are putting a site online.
 
-Five consequences, and they are not stylistic:
+Six consequences, and they are not stylistic:
 
 - **Build on the platform, not beside it.** Do not draft the site as a local file, a canvas
   or an artifact and copy it over at the end. Write pages with the tools; that *is* the
